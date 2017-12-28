@@ -115,9 +115,9 @@ class pbkdf2_opencl:
     def compile(self,type):
         fname = ""
         if (type == 'sha1'):
-            fname = "pbkdf2_sha1.cl"
+            fname = os.path.join("Library","pbkdf2_sha1.cl")
         elif (type == 'sha256'):
-            fname = "pbkdf2_sha256.cl"
+            fname = os.path.join("Library","pbkdf2_sha256.cl")
         else:
             print('Type: ' + self.type + ' not supported!')
             exit(0)

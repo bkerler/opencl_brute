@@ -17,6 +17,12 @@ Installation
    [Here] (http://registrationcenter-download.intel.com/akdlm/irc_nas/12512/opencl_runtime_16.1.2_x64_setup.msi)
 4. Install pyOpenCL using: python -m pip install pyopencl-2017.2.2+cl21-cp36-cp36m-win_amd64.whl
 
+Run
+===
+- For generic information on opencl devices, run : python openclinfo.py
+- To test if Library works correctly, run: python test.py
+- See test.py for example implementation, Library is in Library folder
+
 Issues
 ======
 - Tested only with Intel CPU and GPU

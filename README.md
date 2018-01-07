@@ -5,7 +5,7 @@ Why
 ===
 - Because bruteforcing PBKDF2 using just CPU sucks.
 - Because Python alone is very slow for bruteforcing
-- Because we'd like to bruteforce using Python and not reply on other
+- Because we'd like to bruteforce using Python and not rely on other
   tools like Hashcat (sorry Atom :D) and do not want to compile c++ first
   
 Installation

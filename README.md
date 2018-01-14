@@ -1,5 +1,5 @@
 PBKDF2 SHA1 and SHA256 Bruteforcing using OpenCL (GPU, yay!) and Python
-(c) B. Kerler 2017
+(c) B. Kerler 2017-2018
 
 Why
 ===
@@ -19,14 +19,15 @@ Installation
 
 Run
 ===
-- For generic information on opencl devices, run : python openclinfo.py
-- To test if Library works correctly, run: python test.py
+- To test if Library works correctly, run:
+  "python test.py" -> to print info
+  "python test.py 0" -> to run on first platform
 - See test.py for example implementation, Library is in Library folder
 
 Issues
 ======
-- Tested only with Intel CPU and GPU
-- AMD and NVIDIA GPUs might/will need some code changes (workgroup optimizations)
+- Tested with : Intel CPU and GPU, NVIDIA GTX 1080 Ti
+- AMD might/will need some code changes (workgroup optimizations)
 - Limited for max. 32 chars for password and salt (because speed optimized for mobile
   device security)
  

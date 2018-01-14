@@ -8,10 +8,57 @@ import numpy as np
 import binascii
 import os
 
+class opencl_information:
+    def __init__(self):
+        i=0
+
+    def printplatforms(self):
+        i=0
+        for platform in cl.get_platforms():
+            print('Platform %d - Name %s, Vendor %s' %(i,platform.name,platform.vendor))
+            i+=1
+
+    def printfullinfo(self):
+        print('\n' + '=' * 60 + '\nOpenCL Platforms and Devices')
+        i=0
+        for platform in cl.get_platforms():
+            print('=' * 60)
+            print('Platform %d - Name: ' %i + platform.name)
+            print('Platform %d - Vendor: ' %i + platform.vendor)
+            print('Platform %d - Version: ' %i + platform.version)
+            print('Platform %d - Profile: ' %i + platform.profile)
+
+            for device in platform.get_devices():
+                print(' ' + '-' * 56)
+                print(' Device - Name: ' \
+                      + device.name)
+                print(' Device - Type: ' \
+                      + cl.device_type.to_string(device.type))
+                print(' Device - Max Clock Speed: {0} Mhz' \
+                      .format(device.max_clock_frequency))
+                print(' Device - Compute Units: {0}' \
+                      .format(device.max_compute_units))
+                print(' Device - Local Memory: {0:.0f} KB' \
+                      .format(device.local_mem_size / 1024.0))
+                print(' Device - Constant Memory: {0:.0f} KB' \
+                      .format(device.max_constant_buffer_size / 1024.0))
+                print(' Device - Global Memory: {0:.0f} GB' \
+                      .format(device.global_mem_size / 1073741824.0))
+                print(' Device - Max Buffer/Image Size: {0:.0f} MB' \
+                      .format(device.max_mem_alloc_size / 1048576.0))
+                print(' Device - Max Work Group Size: {0:.0f}' \
+                      .format(device.max_work_group_size))
+                print('\n')
+        i+=1
+
 class pbkdf2_opencl:
 
-    def __init__(self,salt,iter,debug):
-        saltlen=int(len(salt))
+    def __init__(self,platform,salt,iter,debug):
+        platforms = cl.get_platforms()
+        if (platform > len(platforms)):
+            assert("Selected platform %d doesn't exist" % platform)
+
+        saltlen = int(len(salt))
         if (saltlen>int(32)):
             print('Salt longer than 32 chars is not supported!')
             exit(0)
@@ -22,38 +69,20 @@ class pbkdf2_opencl:
         self.n_iter = np.array(iter, dtype=np.uint32)
         self.salt=np.append(n_saltlen,n_salt)
 
-        # Get platforms, both CPU and GPU
-        platforms = cl.get_platforms()
-        devices0 = platforms[0].get_devices()
-        try:
-            devices1 = platforms[1].get_devices()
-        except IndexError:
-            devices1 = "none"
-
+        # Get platforms
+        devices = platforms[platform].get_devices()
         self.workgroupsize=60000
         #Create context for GPU/CPU
-        if devices1!= "none":
-            print("Using Platform 1:")
-            self.ctx = cl.Context(devices1)
-            for device in devices1:
-                print('--------------------------------------------------------------------------')
-                print(' Device - Name: '+ device.name)
-                print(' Device - Type: '+ cl.device_type.to_string(device.type))
-                print(' Device - Compute Units: {0}'.format(device.max_compute_units))
-                print(' Device - Max Work Group Size: {0:.0f}'.format(device.max_work_group_size))
-                if (device.max_work_group_size<self.workgroupsize):
-                    self.workgroupsize=device.max_work_group_size
-        else:
-            print("Using Platform 0:")
-            self.ctx = cl.Context(devices0)
-            for device in devices0:
-                print('--------------------------------------------------------------------------')
-                print(' Device - Name: '+ device.name)
-                print(' Device - Type: '+ cl.device_type.to_string(device.type))
-                print(' Device - Compute Units: {0}'.format(device.max_compute_units))
-                print(' Device - Max Work Group Size: {0:.0f}'.format(device.max_work_group_size))
-                if (device.max_work_group_size<self.workgroupsize):
-                    self.workgroupsize=device.max_work_group_size
+        print("Using Platform %d:" % platform)
+        self.ctx = cl.Context(devices)
+        for device in devices:
+            print('--------------------------------------------------------------------------')
+            print(' Device - Name: '+ device.name)
+            print(' Device - Type: '+ cl.device_type.to_string(device.type))
+            print(' Device - Compute Units: {0}'.format(device.max_compute_units))
+            print(' Device - Max Work Group Size: {0:.0f}'.format(device.max_work_group_size))
+            if (device.max_work_group_size<self.workgroupsize):
+                self.workgroupsize=device.max_work_group_size
 
         print ("\nUsing work group size of %d\n" % self.workgroupsize)
 

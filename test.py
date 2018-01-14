@@ -1,6 +1,15 @@
+import sys
 from Library import opencl
 
-def main():
+def main(argv):
+    if (len(argv)<2):
+        print("OpenCL PBKDF2 implementation test (c) B.Kerler 2018")
+        print("---------------------------------------------------")
+        info=opencl.opencl_information()
+        info.printplatforms()
+        print("\nPlease run as: python test.py [platform number]")
+        exit(0)
+
     # Input values for PBKDF2 SHA1 to be hashed
     passwordlist = [b'password', b'default_password']
     salt = b'1234'
@@ -8,7 +17,8 @@ def main():
     debug = 0
     
     print("Init opencl...")
-    pbkdf2 = opencl.pbkdf2_opencl(salt, iterations, debug)
+    platform = int(argv[1])
+    pbkdf2 = opencl.pbkdf2_opencl(platform, salt, iterations, debug)
     print("Testing sha1...")
     pbkdf2.compile('sha1')
     result=pbkdf2.run(passwordlist)
@@ -35,4 +45,5 @@ def main():
     # for sha256, result should be ['67f6eb6e2e00dea5e3866a5af9956b9a3005f8daf07a2901c45275b54facf9d5', 'b3f7b5906bfe21d7e981c6b8cc90aba88f30376fab26305ebe3c083af4cdf976']
     # End of input values
 
-main()
+if __name__ == '__main__':
+  main(sys.argv)

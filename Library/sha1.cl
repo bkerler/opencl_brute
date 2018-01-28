@@ -1,6 +1,6 @@
 /*
-    PBKDF2 SHA1 OpenCL Optimized kernel, limited to max. 32 chars for salt and password
-    (c) B. Kerler 2017
+    SHA1 OpenCL Optimized kernel
+    (c) B. Kerler 2018
     MIT License
 */
 
@@ -174,299 +174,108 @@ static void sha1_process2 (const unsigned int *W, unsigned int *digest)
   digest[4] += E;
 } 
 
-static void pbkdf(__global const unsigned int *pass, int pass_len, const unsigned int *salt, int salt_len, int iter, unsigned int* hash, unsigned int hash_len)
+static void sha1(__global const unsigned int *pass, int pass_len, unsigned int* hash)
 {
     int plen=pass_len/4;
     if (mod(pass_len,4)) plen++;
 
-    int slen=salt_len/4;
-    if (mod(salt_len,4)) slen++;
-
     unsigned int* p = hash;
 
-    unsigned int ipad[16];
-    ipad[0x0]=0x36363636;
-    ipad[0x1]=0x36363636;
-    ipad[0x2]=0x36363636;
-    ipad[0x3]=0x36363636;
-    ipad[0x4]=0x36363636;
-    ipad[0x5]=0x36363636;
-    ipad[0x6]=0x36363636;
-    ipad[0x7]=0x36363636;
-    ipad[0x8]=0x36363636;
-    ipad[0x9]=0x36363636;
-    ipad[0xA]=0x36363636;
-    ipad[0xB]=0x36363636;
-    ipad[0xC]=0x36363636;
-    ipad[0xD]=0x36363636;
-    ipad[0xE]=0x36363636;
-    ipad[0xF]=0x36363636;
+    unsigned int W[0x10]={0};
+    int loops=plen;
+    int curloop=0;
+    unsigned int State[5]={0};
+    State[0] = 0x67452301;
+    State[1] = 0xefcdab89;
+    State[2] = 0x98badcfe;
+    State[3] = 0x10325476;
+    State[4] = 0xc3d2e1f0;
 
-    unsigned int opad[16];
-    opad[0x0]=0x5C5C5C5C;
-    opad[0x1]=0x5C5C5C5C;
-    opad[0x2]=0x5C5C5C5C;
-    opad[0x3]=0x5C5C5C5C;
-    opad[0x4]=0x5C5C5C5C;
-    opad[0x5]=0x5C5C5C5C;
-    opad[0x6]=0x5C5C5C5C;
-    opad[0x7]=0x5C5C5C5C;
-    opad[0x8]=0x5C5C5C5C;
-    opad[0x9]=0x5C5C5C5C;
-    opad[0xA]=0x5C5C5C5C;
-    opad[0xB]=0x5C5C5C5C;
-    opad[0xC]=0x5C5C5C5C;
-    opad[0xD]=0x5C5C5C5C;
-    opad[0xE]=0x5C5C5C5C;
-    opad[0xF]=0x5C5C5C5C;
 
-    for (int m=0;m<plen && m<16;m++)
+    while (loops>0)
     {
-        ipad[m]^=SWAP(pass[m]);
-        opad[m]^=SWAP(pass[m]);
+        W[0x0]=0x0;
+        W[0x1]=0x0;
+        W[0x2]=0x0;
+        W[0x3]=0x0;
+        W[0x4]=0x0;
+        W[0x5]=0x0;
+        W[0x6]=0x0;
+        W[0x7]=0x0;
+        W[0x8]=0x0;
+        W[0x9]=0x0;
+        W[0xA]=0x0;
+        W[0xB]=0x0;
+        W[0xC]=0x0;
+        W[0xD]=0x0;
+        W[0xE]=0x0;
+        W[0xF]=0x0;
+
+
+        for (int m=0;loops!=0 && m<16;m++)
+        {
+            W[m]^=SWAP(pass[m+(curloop*16)]);
+            loops--;
+        }
+
+        if (loops==0 && mod(pass_len,64)!=0)
+        {
+            unsigned int padding=0x80<<(((pass_len+4)-((pass_len+4)/4*4))*8);
+            int v=mod(pass_len,64);
+            W[v/4]|=SWAP(padding);
+            if ((pass_len&0x3B)!=0x3B)
+            {
+                // Let's add length
+                W[0x0F]=pass_len*8;
+            }
+        }
+
+        sha1_process2(W,State);
+        curloop++;
     }
 
-    // precompute ipad
-            unsigned int stateipad[5]={0};
-            stateipad[0] = 0x67452301;
-            stateipad[1] = 0xefcdab89;
-            stateipad[2] = 0x98badcfe;
-            stateipad[3] = 0x10325476;
-            stateipad[4] = 0xc3d2e1f0;
-
-            //->sha256_update(state,W,ilenor,wposr,ipad,0x40);
-            unsigned int W[0x10]={0};
-            W[0]=ipad[0];
-            W[1]=ipad[1];
-            W[2]=ipad[2];
-            W[3]=ipad[3];
-            W[4]=ipad[4];
-            W[5]=ipad[5];
-            W[6]=ipad[6];
-            W[7]=ipad[7];
-            W[8]=ipad[8];
-            W[9]=ipad[9];
-            W[10]=ipad[10];
-            W[11]=ipad[11];
-            W[12]=ipad[12];
-            W[13]=ipad[13];
-            W[14]=ipad[14];
-            W[15]=ipad[15];
-            sha1_process2(W,stateipad);
-
-        // precompute ipad
-            unsigned int stateopad[5]={0};
-            stateopad[0] = 0x67452301;
-            stateopad[1] = 0xefcdab89;
-            stateopad[2] = 0x98badcfe;
-            stateopad[3] = 0x10325476;
-            stateopad[4] = 0xc3d2e1f0;
-
-            //->sha1_update(state,W,ilenor,wposr,ipad,0x40);
-            W[0]=opad[0];
-            W[1]=opad[1];
-            W[2]=opad[2];
-            W[3]=opad[3];
-            W[4]=opad[4];
-            W[5]=opad[5];
-            W[6]=opad[6];
-            W[7]=opad[7];
-            W[8]=opad[8];
-            W[9]=opad[9];
-            W[10]=opad[10];
-            W[11]=opad[11];
-            W[12]=opad[12];
-            W[13]=opad[13];
-            W[14]=opad[14];
-            W[15]=opad[15];
-            sha1_process2(W,stateopad);
-
-    unsigned int counter = 1;
-    unsigned int state[5]={0};
-    
-    unsigned int tkeylen=hash_len;
-	unsigned int cplen=0;
-	while(tkeylen>0) 
+    if (mod(plen,16)==0)
     {
-		if(tkeylen > 20) cplen = 20;
-		else cplen=tkeylen;
-        
-        //hmac_sha1_init(state,W,ileno,wpos,ipad,opad,pwd);
-        //->sha1_init(state,W,ileno,wpos);
-        //->sha1_update(state,W,ileno,wpos,ipad,0x40);
-        state[0] = stateipad[0];
-        state[1] = stateipad[1];
-        state[2] = stateipad[2];
-        state[3] = stateipad[3];
-        state[4] = stateipad[4];
-        //hmac_sha1_update(state,W,ileno,wpos,ipad,opad,salt,salt_len);
-        //->sha1_update(state,W,ileno,wpos,salt,salt_len);
-        //hmac_sha1_update(state,W,ileno,wpos,ipad,opad,itmp,4);
-        //->sha1_update(state,W,ileno,wpos,itmp,4);
-        W[0]=0;
-        W[1]=0;
-        W[2]=0;
-        W[3]=0;
-        W[4]=0;
-        W[5]=0;
-        W[6]=0;
-        W[7]=0;
-        W[8]=0;
-        W[9]=0;
-        W[10]=0;
-        W[11]=0;
-        W[12]=0;
-        W[13]=0;
-        W[14]=0;
-        for (int m=0;m<slen;m++)
+        W[0x0]=0x0;
+        W[0x1]=0x0;
+        W[0x2]=0x0;
+        W[0x3]=0x0;
+        W[0x4]=0x0;
+        W[0x5]=0x0;
+        W[0x6]=0x0;
+        W[0x7]=0x0;
+        W[0x8]=0x0;
+        W[0x9]=0x0;
+        W[0xA]=0x0;
+        W[0xB]=0x0;
+        W[0xC]=0x0;
+        W[0xD]=0x0;
+        W[0xE]=0x0;
+        W[0xF]=0x0;
+        if ((pass_len&0x3B)!=0x3B)
         {
-            W[m]=SWAP(salt[m]);
+            unsigned int padding=0x80<<(((pass_len+4)-((pass_len+4)/4*4))*8);
+            W[0]|=SWAP(padding);
         }
-        W[slen]=counter;
+        // Let's add length
+        W[0x0F]=pass_len*8;
 
-        unsigned int padding=0x80<<(((salt_len+4)-((salt_len+4)/4*4))*8);
-        W[((mod((salt_len+4),(16*4)))/4)]|=SWAP(padding);
-            // Let's add length
-        W[0x0F]=(0x40+(salt_len+4))*8;
-
-        //W[slen+1]=0x80000000;
-        //W[15]=0x54*8;
-        //hmac_sha1_final(state,W,ileno,ipad,opad,digtmp);
-        //->sha1_finish(state,W,ileno,&opad[0x10]);
-        sha1_process2(W,state);
-
-        //sha1(opad,0x54,digtmp);
-		//->sha1_init(state,W,ileno,wpos);
-		//->sha1_update(state,W,ileno,wpos,opad,0x54);
-		//->sha1_finish(state,W,ileno,digtmp);
-        
-        W[0]=state[0];
-        W[1]=state[1];
-        W[2]=state[2];
-        W[3]=state[3];
-        W[4]=state[4];
-        W[5]=0x80000000;
-        W[6]=0x0;
-        W[7]=0x0;
-        W[8]=0x0;
-        W[9]=0;
-        W[10]=0;
-        W[11]=0;
-        W[12]=0;
-        W[13]=0;
-        W[14]=0;
-        W[15]=0x54*8;
-
-        state[0]=stateopad[0];
-        state[1]=stateopad[1];
-        state[2]=stateopad[2];
-        state[3]=stateopad[3];
-        state[4]=stateopad[4];
-
-        //sha256_finish(state,W,ileno,digtmp);
-        sha1_process2(W,state);
-
-        p[0]=W[0]=state[0];
-        p[1]=W[1]=state[1];
-        p[2]=W[2]=state[2];
-        p[3]=W[3]=state[3];
-        p[4]=W[4]=state[4];
-
-        for(int j = 1; j < iter; j++) 
-        {
-            //hmac_sha1(pwd,digtmp,32,digtmp);
-            //->sha1_init(state,W,ilenor,wposr);
-            //->sha1_update(state,W,ilenor,wposr,digtmp,32);
-            //->sha1_finish(state,W,ileno,&opad[0x10]);
-
-            W[5]=0x80000000; //Padding
-            W[6]=0;
-            W[7]=0;
-            W[8]=0;
-            W[9]=0;
-            W[10]=0;
-            W[11]=0;
-            W[12]=0;
-            W[13]=0;
-            W[14]=0;
-            W[15]=0x54*8;
-            state[0] = stateipad[0];
-            state[1] = stateipad[1];
-            state[2] = stateipad[2];
-            state[3] = stateipad[3];
-            state[4] = stateipad[4];
-            sha1_process2(W,state);
-
-            unsigned int M[0x10]={0};
-            M[0]=state[0];
-            M[1]=state[1];
-            M[2]=state[2];
-            M[3]=state[3];
-            M[4]=state[4];
-            M[5]=0x80000000; //Padding
-            M[6]=0;
-            M[7]=0;
-            M[8]=0;
-            M[9]=0;
-            M[10]=0;
-            M[11]=0;
-            M[12]=0;
-            M[13]=0;
-            M[14]=0;
-            M[15]=0x54*8;
-
-            //->sha1_init(state,W,ilenor,wposr);
-            //->sha1_update(state,W,ilenor,wposr,opad,0x60);
-            state[0] = stateopad[0];
-            state[1] = stateopad[1];
-            state[2] = stateopad[2];
-            state[3] = stateopad[3];
-            state[4] = stateopad[4];
-
-            //->sha1_finish(state,W,ilenor,digtmp);
-            sha1_process2(M,state);
-
-            W[0]=state[0];
-            W[1]=state[1];
-            W[2]=state[2];
-            W[3]=state[3];
-            W[4]=state[4];
-
-            p[0] ^= state[0];
-            p[1] ^= state[1];
-            p[2] ^= state[2];
-            p[3] ^= state[3];
-            p[4] ^= state[4];
-        }
-        
-        p[0]=SWAP(p[0]);
-        p[1]=SWAP(p[1]);
-        p[2]=SWAP(p[2]);
-        p[3]=SWAP(p[3]);
-        p[4]=SWAP(p[4]);
-        
-        tkeylen-= cplen;
-        counter++;
-        p+= cplen/4;
+        sha1_process2(W,State);
     }
+
+    p[0]=SWAP(State[0]);
+    p[1]=SWAP(State[1]);
+    p[2]=SWAP(State[2]);
+    p[3]=SWAP(State[3]);
+    p[4]=SWAP(State[4]);
     return;
 }
 
-__kernel void func_pbkdf2(__global const inbuf * inbuffer, __global outbuf * outbuffer, __global const inbuf * salt, const int iterations)
+__kernel void func_sha1(__global const inbuf * inbuffer, __global outbuf * outbuffer)
 {
     unsigned int idx = get_global_id(0);
     unsigned int hash[32/4]={0};
-    unsigned int ssalt[32/4]={0};
-    ssalt[0]=salt[0].buffer[0];
-    ssalt[1]=salt[0].buffer[1];
-    ssalt[2]=salt[0].buffer[2];
-    ssalt[3]=salt[0].buffer[3];
-    ssalt[4]=salt[0].buffer[4];
-    ssalt[5]=salt[0].buffer[5];
-    ssalt[6]=salt[0].buffer[6];
-    ssalt[7]=salt[0].buffer[7];
-    int salt_len=salt[0].length;
-    pbkdf(inbuffer[idx].buffer, inbuffer[idx].length, ssalt, salt_len, iterations, hash,32);
+    sha1(inbuffer[idx].buffer, inbuffer[idx].length, hash);
     outbuffer[idx].buffer[0]=hash[0];
     outbuffer[idx].buffer[1]=hash[1];
     outbuffer[idx].buffer[2]=hash[2];

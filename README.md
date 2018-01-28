@@ -3,8 +3,8 @@ PBKDF2 SHA1 and SHA256 Bruteforcing using OpenCL (GPU, yay!) and Python
 
 Why
 ===
-- Because bruteforcing PBKDF2 using just CPU sucks.
-- Because Python alone is very slow for bruteforcing
+- Because bruteforcing PBKDF2 and hashing SHA1/SHA256 using just CPU sucks.
+- Because Python itself is very slow for bruteforcing
 - Because we'd like to bruteforce using Python and not rely on other
   tools like Hashcat (sorry Atom :D) and do not want to compile c++ first
   
@@ -28,7 +28,7 @@ Issues
 ======
 - Tested with : Intel CPU and GPU, NVIDIA GTX 1080 Ti
 - AMD might/will need some code changes (workgroup optimizations)
-- Limited for max. 32 chars for password and salt (because speed optimized for mobile
+- Limited for max. 32 chars for password, salt and hash (because speed optimized for mobile
   device security)
  
 Published under MIT license

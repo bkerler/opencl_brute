@@ -143,9 +143,14 @@ class pbkdf2_opencl:
 
     def compile(self,type):
         fname = ""
-        if (type == 'sha1'):
+        self.type=type
+        if (self.type == 'sha1'):
+            fname = os.path.join("Library","sha1.cl")
+        elif (self.type == 'sha256'):
+            fname = os.path.join("Library","sha256.cl")
+        elif (self.type == 'pbkdf2_sha1'):
             fname = os.path.join("Library","pbkdf2_sha1.cl")
-        elif (type == 'sha256'):
+        elif (self.type == 'pbkdf2_sha256'):
             fname = os.path.join("Library","pbkdf2_sha256.cl")
         else:
             print('Type: ' + self.type + ' not supported!')
@@ -187,12 +192,23 @@ class pbkdf2_opencl:
             pass_g =  cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=pwarray)
             salt_g = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.salt)
             result_g = cl.Buffer(self.ctx, mf.WRITE_ONLY, result.nbytes)
-            # Call Kernel. Automatically takes care of block/grid distribution
-            self.prg.func_pbkdf2(self.queue, pwdim, None , pass_g, result_g, salt_g, self.n_iter)
+            
+            #Call Kernel. Automatically takes care of block/grid distribution
+            if (self.type=="pbkdf2_sha1" or self.type=="pbkdf2_sha256"):
+                hashlen=0x20
+                self.prg.func_pbkdf2(self.queue, pwdim, None , pass_g, result_g, salt_g, self.n_iter)
+            elif (self.type=="sha1"):
+                hashlen=0x14
+                self.prg.func_sha1(self.queue,pwdim,None,pass_g,result_g)
+                #SHA1 does support longer lengths, but inputbuffer and hash are limited to 32 chars
+            elif (self.type=="sha256"):
+                hashlen=0x20
+                self.prg.func_sha256(self.queue,pwdim,None,pass_g,result_g)
+                #SHA256 does support longer lengths, but inputbuffer and hash are limited to 32 chars
             cl.enqueue_copy(self.queue, result, result_g)
             totalpws-=pwcount
             pos+=pwcount
             hexvalue = binascii.hexlify(result)
             for value in range(0, len(hexvalue), 64):
-                results.append(hexvalue[value:value + 64].decode())
+                results.append(hexvalue[value:value + 64].decode()[0:hashlen*2])
         return results

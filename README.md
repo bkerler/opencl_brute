@@ -32,5 +32,6 @@ Issues
   device security)
  
 Published under MIT license
+Additional license limitations: No use in commercial products without prior permit.
 
 Enjoy !

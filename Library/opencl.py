@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
 '''
     Copyright by B.Kerler 2017, PBKDF1_SHA1 and SHA256 PyOpenCl implementation, max 32 chars for password + salt
     MIT License
@@ -54,6 +56,10 @@ class opencl_information:
 class pbkdf2_opencl:
 
     def __init__(self,platform,salt,iter,debug):
+        if type(salt)!=bytes:
+            assert("Parameter salt has to be type of bytes")
+        if type(iter)!=int:
+            assert("Parameter Iteration has to be type of int")
         platforms = cl.get_platforms()
         if (platform > len(platforms)):
             assert("Selected platform %d doesn't exist" % platform)
@@ -163,6 +169,12 @@ class pbkdf2_opencl:
         self.prg = cl.Program(self.ctx, src).build()
 
     def run(self,passwordlist):
+        if type(passwordlist)!=list:
+            assert("Parameter passwordlist has to be an array")
+        if len(passwordlist)==0:
+            assert ("Password list is empty")
+        if type(passwordlist[0])!=bytes:
+            assert ("Password in passwordlist has to be type of utf-8 string or bytes")
         pos=0
         mf = cl.mem_flags
         totalpws=len(passwordlist)
@@ -180,10 +192,20 @@ class pbkdf2_opencl:
                 pwlen = int(len(pw))
                 if (pwlen>int(32)): #Only chars up to length 32 supported
                     continue
-                n_pw = np.fromstring(pw, dtype=np.uint32)
+                if (len(pw)%4)!=0:
+                    pw=pw+(b'\0'*(len(pw)%4))
+                n_pw = np.frombuffer(pw, dtype=np.uint32)
                 n_pwlen = np.array([pwlen], dtype=np.uint32)
-                password = np.append(n_pwlen, n_pw)
-                password.resize(9)
+                password = np.array([0]*9,dtype=np.uint32)
+                z=0
+                for i in range(0,len(n_pwlen)):
+                    password[z]=n_pwlen[i]
+                    z+=1
+                max=9-len(n_pwlen)
+                if max>len(n_pw):
+                    max=len(n_pw)
+                for i in range(0,max):
+                    password[z+i]=n_pw[i]
                 pwarray = np.append(pwarray, password)
 
             result = np.zeros(int(32 / 4) * pwcount, dtype=np.uint32)

@@ -192,8 +192,9 @@ class pbkdf2_opencl:
                 pwlen = int(len(pw))
                 if (pwlen>int(32)): #Only chars up to length 32 supported
                     continue
-                if (len(pw)%4)!=0:
-                    pw=pw+(b'\0'*(len(pw)%4))
+                modlen=len(pw)%4
+                if modlen!=0:
+                    pw=pw+(b'\0'*(4-modlen))
                 n_pw = np.frombuffer(pw, dtype=np.uint32)
                 n_pwlen = np.array([pwlen], dtype=np.uint32)
                 password = np.array([0]*9,dtype=np.uint32)

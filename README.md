@@ -27,7 +27,7 @@ Run
 Issues
 ======
 - Tested with : Intel CPU and GPU, NVIDIA GTX 1080 Ti, AMD 970
-- Limited for max. 32 chars for password, salt and hash (because speed optimized for mobile
+- Limited for max. 64 chars for password, salt and hash (because speed optimized for mobile
   device security)
  
 Published under MIT license

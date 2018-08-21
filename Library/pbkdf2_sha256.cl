@@ -6,11 +6,11 @@
 
 typedef struct {
 	unsigned int length;
-	unsigned int buffer[32/4];
+	unsigned int buffer[64/4];
 } inbuf;
 
 typedef struct {
-	unsigned int buffer[32/4];
+	unsigned int buffer[64/4];
 } outbuf;
 
 #define F1(x,y,z)   (bitselect(z,y,x))
@@ -528,8 +528,8 @@ static void pbkdf256(__global const unsigned int *pass, int pass_len, unsigned i
 __kernel void func_pbkdf2(__global const inbuf * inbuffer, __global outbuf * outbuffer, __global const inbuf * salt, const int iterations)
 {
     unsigned int idx = get_global_id(0);
-    unsigned int hash[32/4]={0};
-    unsigned int ssalt[32/4]={0};
+    unsigned int hash[64/4]={0};
+    unsigned int ssalt[64/4]={0};
     ssalt[0]=salt[0].buffer[0];
     ssalt[1]=salt[0].buffer[1];
     ssalt[2]=salt[0].buffer[2];

@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 '''
-    Copyright by B.Kerler 2017, PBKDF1_SHA1 and SHA256 PyOpenCl implementation, max 32 chars for password + salt
+    Copyright by B.Kerler 2017, PBKDF1_SHA1 and SHA256 PyOpenCl implementation, max 64 chars for password + salt
     MIT License
     Implementation was confirmed to work with Intel OpenCL on Intel(R) HD Graphics 520 and Intel(R) Core(TM) i5-6200U CPU
 '''
@@ -55,7 +55,7 @@ class opencl_information:
 
 class pbkdf2_opencl:
 
-    def __init__(self,platform,salt,iter,debug):
+    def __init__(self,platform,salt,iter,debug,N=0,r=0,p=0,length=0x20):
         if type(salt)!=bytes:
             assert("Parameter salt has to be type of bytes")
         if type(iter)!=int:
@@ -65,15 +65,18 @@ class pbkdf2_opencl:
             assert("Selected platform %d doesn't exist" % platform)
 
         saltlen = int(len(salt))
-        if (saltlen>int(32)):
-            print('Salt longer than 32 chars is not supported!')
+        if (saltlen>int(64)):
+            print('Salt longer than 64 chars is not supported!')
             exit(0)
-        hash=b'\x00'*32
-        hash_len=32
+        hash=b'\x00'*64
+        hash_len=64
         n_salt = np.fromstring(salt, dtype=np.uint32)
-        n_saltlen = np.array([saltlen], dtype=np.uint32)
+        n_saltlen = np.array([len(salt)], dtype=np.uint32)
         self.n_iter = np.array(iter, dtype=np.uint32)
         self.salt=np.append(n_saltlen,n_salt)
+        self.N = N #np.array(N, dtype=np.uint32)
+        self.r = r #np.array(r, dtype=np.uint32)
+        self.p = p #np.array(p, dtype=np.uint32)
 
         # Get platforms
         devices = platforms[platform].get_devices()
@@ -149,6 +152,7 @@ class pbkdf2_opencl:
 
     def compile(self,type):
         fname = ""
+        src=""
         self.type=type
         if (self.type == 'sha1'):
             fname = os.path.join("Library","sha1.cl")
@@ -163,8 +167,8 @@ class pbkdf2_opencl:
             exit(0)
 
         with open(fname, "r") as rf:
-            src = rf.read()
-
+            src += rf.read()
+            
         # Kernel function instantiation
         self.prg = cl.Program(self.ctx, src).build()
 
@@ -187,29 +191,28 @@ class pbkdf2_opencl:
                 pwcount=self.workgroupsize
 
             pwdim = (pwcount,)
-
             for pw in passwordlist[pos:pos+pwcount]:
                 pwlen = int(len(pw))
-                if (pwlen>int(32)): #Only chars up to length 32 supported
+                if (pwlen>int(64)): #Only chars up to length 32 supported
                     continue
                 modlen=len(pw)%4
                 if modlen!=0:
                     pw=pw+(b'\0'*(4-modlen))
                 n_pw = np.frombuffer(pw, dtype=np.uint32)
                 n_pwlen = np.array([pwlen], dtype=np.uint32)
-                password = np.array([0]*9,dtype=np.uint32)
+                password = np.array([0]*((int)(64/4)+1),dtype=np.uint32)
                 z=0
                 for i in range(0,len(n_pwlen)):
                     password[z]=n_pwlen[i]
                     z+=1
-                max=9-len(n_pwlen)
+                max=((int)(64/4)+1)-len(n_pwlen)
                 if max>len(n_pw):
                     max=len(n_pw)
                 for i in range(0,max):
                     password[z+i]=n_pw[i]
                 pwarray = np.append(pwarray, password)
 
-            result = np.zeros(int(32 / 4) * pwcount, dtype=np.uint32)
+            result = np.zeros(int(64 / 4) * pwcount, dtype=np.uint32)
 
             #Allocate memory for variables on the device
             pass_g =  cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=pwarray)
@@ -223,15 +226,16 @@ class pbkdf2_opencl:
             elif (self.type=="sha1"):
                 hashlen=0x14
                 self.prg.func_sha1(self.queue,pwdim,None,pass_g,result_g)
-                #SHA1 does support longer lengths, but inputbuffer and hash are limited to 32 chars
+                #SHA1 does support longer lengths, but inputbuffer and hash are limited to 64 chars
             elif (self.type=="sha256"):
                 hashlen=0x20
                 self.prg.func_sha256(self.queue,pwdim,None,pass_g,result_g)
-                #SHA256 does support longer lengths, but inputbuffer and hash are limited to 32 chars
+                #SHA256 does support longer lengths, but inputbuffer and hash are limited to 64 chars
             cl.enqueue_copy(self.queue, result, result_g)
             totalpws-=pwcount
             pos+=pwcount
             hexvalue = binascii.hexlify(result)
-            for value in range(0, len(hexvalue), 64):
-                results.append(hexvalue[value:value + 64].decode()[0:hashlen*2])
+            for value in range(0, len(hexvalue), 64*2):
+                val=hexvalue[value:value + 64*2].decode()[0:hashlen*2]
+                results.append(val)
         return results

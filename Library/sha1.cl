@@ -6,11 +6,11 @@
 
 typedef struct {
 	unsigned int length;
-	unsigned int buffer[32/4];
+	unsigned int buffer[64/4];
 } inbuf;
 
 typedef struct {
-	unsigned int buffer[32/4];
+	unsigned int buffer[64/4];
 } outbuf;
 
 #define rotl32(a,n) rotate ((a), (n)) 

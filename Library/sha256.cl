@@ -6,11 +6,11 @@
 
 typedef struct {
 	unsigned int length;
-	unsigned int buffer[32/4];
+	unsigned int buffer[64/4];
 } inbuf;
 
 typedef struct {
-	unsigned int buffer[32/4];
+	unsigned int buffer[64/4];
 } outbuf;
 
 #define F1(x,y,z)   (bitselect(z,y,x))
@@ -321,7 +321,7 @@ static void sha256(__global const unsigned int *pass, int pass_len, unsigned int
 __kernel void func_sha256(__global const inbuf * inbuffer, __global outbuf * outbuffer)
 {
     unsigned int idx = get_global_id(0);
-    unsigned int hash[32/4]={0};
+    unsigned int hash[64/4]={0};
     sha256(inbuffer[idx].buffer, inbuffer[idx].length, hash);
     outbuffer[idx].buffer[0]=hash[0];
     outbuffer[idx].buffer[1]=hash[1];

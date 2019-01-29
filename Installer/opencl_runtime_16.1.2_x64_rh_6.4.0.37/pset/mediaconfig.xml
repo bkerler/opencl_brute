@@ -1,0 +1,75 @@
+<MediaConfig>
+    <Name>OpenCL™ runtime for Intel® Core™ and Xeon® Processors (16.1.2)</Name>
+    <Description/>
+    <GUID>1512462671236</GUID>
+    <Product platform="INTEL64" id="1">
+        <Name>${SUITE_NAME}</Name>
+        <Description/>
+        <Layers>
+            <phonehome>
+                <HideActivateButton>0</HideActivateButton>
+                <HideOnLicenseTab>0</HideOnLicenseTab>
+            </phonehome>
+        </Layers>
+        <Component platform="INTEL64" invisible="0" id="1" depend="" mandatory="1" core="1">
+            <Name>OpenCL™ installable client driver loader</Name>
+            <Description/>
+            <Selected>1</Selected>
+            <Layers>
+                <phonehome>
+                    <IsmName>${SUITE_NAME}</IsmName>
+                    <IsmGuid>{F3AD6961-38EB-47A6-8420-AAE0798075CC}</IsmGuid>
+                    <IsmVersion>16.1.2</IsmVersion>
+                    <IsmUpdateId>l_ocl_cpu_runtime_rh_x64-6.4.0.37</IsmUpdateId>
+                    <IsmMediaId>XXX</IsmMediaId>
+                    <HideActivateButton>1</HideActivateButton>
+                    <HideOnLicenseTab>1</HideOnLicenseTab>
+                </phonehome>
+            </Layers>
+            <RPMProductFamily>opencl-1.2-base</RPMProductFamily>
+            <RPMProductCode>opencl-1.2-base</RPMProductCode>
+            <Version>6.4.0.37</Version>
+            <RPMProductRelease>1</RPMProductRelease>
+            <RPMProductArch>x86_64</RPMProductArch>
+            <NONRPMProductCode>opencl-1.2-base-6.4.0.37-1.x86_64.rpm</NONRPMProductCode>
+            <Abbr>opencl-1.2-base__x86_64</Abbr>
+            <Data>1</Data>
+            <RPMFileDir>${PACKAGE_DIR}/rpm</RPMFileDir>
+            <Type>rpm</Type>
+        </Component>
+        <Component platform="INTEL64" invisible="0" id="2" depend="" mandatory="1" core="0">
+            <Name>OpenCL™ runtime for Intel® CPU device</Name>
+            <Description/>
+            <Selected>1</Selected>
+            <Layers>
+                <phonehome>
+                    <HideActivateButton>0</HideActivateButton>
+                    <HideOnLicenseTab>0</HideOnLicenseTab>
+                </phonehome>
+            </Layers>
+            <RPMProductFamily>opencl-1.2-intel-cpu</RPMProductFamily>
+            <RPMProductCode>opencl-1.2-intel-cpu</RPMProductCode>
+            <Version>6.4.0.37</Version>
+            <RPMProductRelease>1</RPMProductRelease>
+            <RPMProductArch>x86_64</RPMProductArch>
+            <NONRPMProductCode>opencl-1.2-intel-cpu-6.4.0.37-1.x86_64.rpm</NONRPMProductCode>
+            <Abbr>opencl-1.2-intel-cpu__x86_64</Abbr>
+            <Data>93</Data>
+            <RPMFileDir>${PACKAGE_DIR}/rpm</RPMFileDir>
+            <Type>rpm</Type>
+        </Component>
+        <Component platform="INTEL64" invisible="1" id="4" mandatory="1">
+            <Name>Uninstaller</Name>
+            <Description>Uninstaller</Description>
+            <RPMFileDir>${PACKAGE_DIR}/rpm</RPMFileDir>
+            <Version>6.4.0.37</Version>
+            <RPMProductRelease>1</RPMProductRelease>
+            <Selected>1</Selected>
+            <NONRPMProductCode>opencl-1.2-base-pset-6.4.0.37-1.noarch.rpm</NONRPMProductCode>
+            <Type>rpm</Type>
+            <RPMProductCode>opencl-1.2-base-pset</RPMProductCode>
+            <Abbr>opencl-1.2-base-pset</Abbr>
+            <Data>66</Data>
+        </Component>
+    </Product>
+</MediaConfig>

@@ -1,241 +1,540 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 '''
-    Copyright by B.Kerler 2017, PBKDF1_SHA1 and SHA256 PyOpenCl implementation, max 64 chars for password + salt
+    Original copyright:
+    Copyright by B.Kerler 2017, PBKDF1_SHA1 and SHA256 PyOpenCl implementation, max 32 chars for password + salt
     MIT License
     Implementation was confirmed to work with Intel OpenCL on Intel(R) HD Graphics 520 and Intel(R) Core(TM) i5-6200U CPU
 '''
+'''
+    Adapted for generalising to more hash functions
+    Allows any length input (efficiently, by declaring the max in advance)
+     - salt ditched atm, but hoping to restore it
+     - pbkdf2 forgotten about for now
+'''
+
+from Library.buffer_structs import buffer_structs
 import pyopencl as cl
 import numpy as np
-import binascii
+from binascii import unhexlify, hexlify
 import os
+from itertools import chain, repeat, zip_longest
+from collections import deque
+from hashlib import pbkdf2_hmac
 
-class opencl_information:
-    def __init__(self):
-        i=0
+# Corresponding to opencl (CAN'T BE CHANGED):
+r = 8
+BLOCK_LEN_BYTES = 128 * r
 
-    def printplatforms(self):
-        i=0
-        for platform in cl.get_platforms():
-            print('Platform %d - Name %s, Vendor %s' %(i,platform.name,platform.vendor))
-            i+=1
+# Little helper, (22,5) -> 5,5,5,5,2.  itertools is bae
+def takeInChunks(n,d):
+    assert d > 0 and n >= 0
+    return chain(repeat(d, n // d), filter(lambda x:x!=0, [n % d]))
+def printif(b, s):
+    if b:
+        print(s)
 
-    def printfullinfo(self):
-        print('\n' + '=' * 60 + '\nOpenCL Platforms and Devices')
-        i=0
-        for platform in cl.get_platforms():
-            print('=' * 60)
-            print('Platform %d - Name: ' %i + platform.name)
-            print('Platform %d - Vendor: ' %i + platform.vendor)
-            print('Platform %d - Version: ' %i + platform.version)
-            print('Platform %d - Profile: ' %i + platform.profile)
-
-            for device in platform.get_devices():
-                print(' ' + '-' * 56)
-                print(' Device - Name: ' \
-                      + device.name)
-                print(' Device - Type: ' \
-                      + cl.device_type.to_string(device.type))
-                print(' Device - Max Clock Speed: {0} Mhz' \
-                      .format(device.max_clock_frequency))
-                print(' Device - Compute Units: {0}' \
-                      .format(device.max_compute_units))
-                print(' Device - Local Memory: {0:.0f} KB' \
-                      .format(device.local_mem_size / 1024.0))
-                print(' Device - Constant Memory: {0:.0f} KB' \
-                      .format(device.max_constant_buffer_size / 1024.0))
-                print(' Device - Global Memory: {0:.0f} GB' \
-                      .format(device.global_mem_size / 1073741824.0))
-                print(' Device - Max Buffer/Image Size: {0:.0f} MB' \
-                      .format(device.max_mem_alloc_size / 1048576.0))
-                print(' Device - Max Work Group Size: {0:.0f}' \
-                      .format(device.max_work_group_size))
-                print('\n')
-        i+=1
-
-class pbkdf2_opencl:
-
-    def __init__(self,platform,salt,iter,debug,N=0,r=0,p=0,length=0x20):
-        if type(salt)!=bytes:
-            assert("Parameter salt has to be type of bytes")
-        if type(iter)!=int:
-            assert("Parameter Iteration has to be type of int")
-        platforms = cl.get_platforms()
-        if (platform > len(platforms)):
-            assert("Selected platform %d doesn't exist" % platform)
-
-        saltlen = int(len(salt))
-        if (saltlen>int(64)):
-            print('Salt longer than 64 chars is not supported!')
-            exit(0)
-        hash=b'\x00'*64
-        hash_len=64
-        n_salt = np.fromstring(salt, dtype=np.uint32)
-        n_saltlen = np.array([len(salt)], dtype=np.uint32)
-        self.n_iter = np.array(iter, dtype=np.uint32)
-        self.salt=np.append(n_saltlen,n_salt)
-        self.N = N #np.array(N, dtype=np.uint32)
-        self.r = r #np.array(r, dtype=np.uint32)
-        self.p = p #np.array(p, dtype=np.uint32)
-
-        # Get platforms
-        devices = platforms[platform].get_devices()
-        self.workgroupsize=60000
-        #Create context for GPU/CPU
-        print("Using Platform %d:" % platform)
+class opencl_interface:
+    debug=False
+    inv_memory_density=1
+    # Initialiser for the key properties
+    #   pbkdf related initialisation removed, will reappear somewhere else
+    def __init__(self, platformNum, debug=0, write_combined_file=False, maxWorkgroupSize=60000, inv_memory_density=1, N_value=15):
+        printif(debug,"Using Platform %d:" % platformNum)
+        devices = cl.get_platforms()[platformNum].get_devices()
+        self.platform_number=platformNum
+        # Show devices for the platform, and adjust workgroup size
+        # Create the context for GPU/CPU
+        self.workgroupsize = maxWorkgroupSize
+        # Adjust workgroup size so that we don't run out of RAM:
+        # As with bench_sCrypt.py, not really working!
+        self.sworkgroupsize = self.determineWorkgroupsize(N_value)
+        self.inv_memory_density=inv_memory_density
         self.ctx = cl.Context(devices)
+        self.queue = cl.CommandQueue(self.ctx)
+        self.debug=debug
+
         for device in devices:
-            print('--------------------------------------------------------------------------')
-            print(' Device - Name: '+ device.name)
-            print(' Device - Type: '+ cl.device_type.to_string(device.type))
-            print(' Device - Compute Units: {0}'.format(device.max_compute_units))
-            print(' Device - Max Work Group Size: {0:.0f}'.format(device.max_work_group_size))
+            printif(debug, '--------------------------------------------------------------------------')
+            printif(debug, ' Device - Name: '+ device.name)
+            printif(debug, ' Device - Type: '+ cl.device_type.to_string(device.type))
+            printif(debug, ' Device - Compute Units: {0}'.format(device.max_compute_units))
+            printif(debug, ' Device - Max Work Group Size: {0:.0f}'.format(device.max_work_group_size))
+            printif(debug, ' Device - Global memory size: {}'.format(device.global_mem_size))
+            printif(debug, ' Device - Local memory size:  {}'.format(device.local_mem_size))
+            printif(debug, ' Device - Max clock frequency: {} MHz'.format(device.max_clock_frequency))
+
+            assert device.endian_little == 1, "DEVICE is not little endian : pretty sure we rely on this!"
             if (device.max_work_group_size<self.workgroupsize):
                 self.workgroupsize=device.max_work_group_size
+        printif(debug, "\nUsing work group size of %d\n" % self.workgroupsize)
 
-        print ("\nUsing work group size of %d\n" % self.workgroupsize)
+        # Set the debug flags
+        os.environ['PYOPENCL_COMPILER_OUTPUT'] = str(debug)
+        self.write_combined_file = write_combined_file
 
-        # Create queue for each kernel execution
-        self.queue = cl.CommandQueue(self.ctx)
 
-        # Kernel function
-        src=""
-        if (debug):
-            os.environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
-            src = """
-            typedef struct {
-                unsigned int length;
-                unsigned int buffer[32/4];
-            } inbuf;
-            
-            typedef struct {
-                unsigned int buffer[32/4];
-            } outbuf;
-            
-            static void pbkdf(__global const unsigned int *pass, int pass_len, const unsigned int *salt, int salt_len, int iter, unsigned int* hash, unsigned int hash_len)
-            {
-                hash[0]=pass_len;
-                hash[1]=pass[0];
-                hash[2]=hash_len;
-                hash[3]=iter;
-                hash[4]=salt_len;
-                hash[5]=salt[0];
-            }
-            
-            __kernel void func_pbkdf2(__global const inbuf * inbuffer, __global outbuf * outbuffer, __global const inbuf * salt, const int iterations)
-            {
-                unsigned int idx = get_global_id(0);
-                unsigned int hash[32/4]={0};
-                unsigned int ssalt[32/4]={0};
-                ssalt[0]=salt[0].buffer[0];
-                ssalt[1]=salt[0].buffer[1];
-                ssalt[2]=salt[0].buffer[2];
-                ssalt[3]=salt[0].buffer[3];
-                ssalt[4]=salt[0].buffer[4];
-                ssalt[5]=salt[0].buffer[5];
-                ssalt[6]=salt[0].buffer[6];
-                ssalt[7]=salt[0].buffer[7];
-                int salt_len=salt[0].length;
-                pbkdf(inbuffer[idx].buffer, inbuffer[idx].length, ssalt, salt_len, iterations, hash,32);
-                outbuffer[idx].buffer[0]=hash[0];
-                outbuffer[idx].buffer[1]=hash[1];
-                outbuffer[idx].buffer[2]=hash[2];
-                outbuffer[idx].buffer[3]=hash[3];
-                outbuffer[idx].buffer[4]=hash[4];
-                outbuffer[idx].buffer[5]=hash[5];
-                outbuffer[idx].buffer[6]=hash[6];
-                outbuffer[idx].buffer[7]=hash[7];
-            }
-            """
+    def compile(self, bufferStructsObj, library_file, footer_file=None, N=15, invMemoryDensity=2):
+        assert type(N) == int
+        assert N < 20, "N >= 20 won't fit in a single buffer, so is unsupported. Nothing sane should use 20, is this wickr?"
+        self.N = N
+        if bufferStructsObj.code==None:
+            src=""
         else:
-            os.environ['PYOPENCL_COMPILER_OUTPUT'] = '0'
-
-    def compile(self,type):
-        fname = ""
-        src=""
-        self.type=type
-        if (self.type == 'sha1'):
-            fname = os.path.join("Library","sha1.cl")
-        elif (self.type == 'sha256'):
-            fname = os.path.join("Library","sha256.cl")
-        elif (self.type == 'pbkdf2_sha1'):
-            fname = os.path.join("Library","pbkdf2_sha1.cl")
-        elif (self.type == 'pbkdf2_sha256'):
-            fname = os.path.join("Library","pbkdf2_sha256.cl")
-        else:
-            print('Type: ' + self.type + ' not supported!')
-            exit(0)
-
-        with open(fname, "r") as rf:
+            src = bufferStructsObj.code
+        with open(os.path.join("Library","worker","generic",library_file), "r") as rf:
             src += rf.read()
-            
-        # Kernel function instantiation
+
+        if footer_file:
+            with open(os.path.join("Library","worker","generic",footer_file), "r") as rf:
+                src += rf.read()
+
+        # Standardise to using no \r's, move to bytes to stop trickery
+        src = src.encode("ascii")
+        src = src.replace(b"\r\n",b"\n")
+
+        # Debugging
+        if self.write_combined_file:
+            with open("combined_" + library_file, "wb") as wf:
+                wf.write(src)
+
+        # Convert back to text!
+        src = src.decode("ascii")
+
+        # Check that it starts with 2 newlines, for adding our defines
+        if src.startswith("\n\n"):
+            src = "\n\n" + src
+            src = src[len("\n\n"):]
+            # Prepend define N and invMemoryDensity
+            defines = "#define N {}\n#define invMemoryDensity {}\n".format(N, invMemoryDensity)
+            src = defines + src
+
+        # Kernel function instantiation. Build returns self.
         self.prg = cl.Program(self.ctx, src).build()
+        return self.prg
 
-    def run(self,passwordlist):
-        if type(passwordlist)!=list:
-            assert("Parameter passwordlist has to be an array")
-        if len(passwordlist)==0:
-            assert ("Password list is empty")
-        if type(passwordlist[0])!=bytes:
-            assert ("Password in passwordlist has to be type of utf-8 string or bytes")
-        pos=0
-        mf = cl.mem_flags
-        totalpws=len(passwordlist)
-        results = []
-        while (totalpws>0):
-            pwarray = np.empty(0, dtype=np.uint32)
-            if (totalpws<self.workgroupsize):
-                pwcount=totalpws
-            else:
-                pwcount=self.workgroupsize
+    # Forms the input buffer of derived keys
+    # Returns the buffer and number in the buffer, <= n (iter may be exhausted)
+    def makeInputBuffer(self, dkIter, n):
+        inpArray = bytearray()
+        numEaten = n
 
-            pwdim = (pwcount,)
-            for pw in passwordlist[pos:pos+pwcount]:
-                pwlen = int(len(pw))
-                if (pwlen>int(64)): #Only chars up to length 32 supported
-                    continue
-                modlen=len(pw)%4
-                if modlen!=0:
-                    pw=pw+(b'\0'*(4-modlen))
-                n_pw = np.frombuffer(pw, dtype=np.uint32)
-                n_pwlen = np.array([pwlen], dtype=np.uint32)
-                password = np.array([0]*((int)(64/4)+1),dtype=np.uint32)
-                z=0
-                for i in range(0,len(n_pwlen)):
-                    password[z]=n_pwlen[i]
-                    z+=1
-                max=((int)(64/4)+1)-len(n_pwlen)
-                if max>len(n_pw):
-                    max=len(n_pw)
-                for i in range(0,max):
-                    password[z+i]=n_pw[i]
-                pwarray = np.append(pwarray, password)
+        for i in range(n):
+            try:
+                dk = dkIter.__next__()
+            except StopIteration:
+                # Correct the chunk size and break
+                numEaten = i
+                break
 
-            result = np.zeros(int(64 / 4) * pwcount, dtype=np.uint32)
-
-            #Allocate memory for variables on the device
-            pass_g =  cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=pwarray)
-            salt_g = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.salt)
-            result_g = cl.Buffer(self.ctx, mf.WRITE_ONLY, result.nbytes)
+            assert len(dk) == BLOCK_LEN_BYTES
+            #   , "Derived key input is length {}, when we expected {}".format(len(dk), BLOCK_LEN_BYTES)
             
-            #Call Kernel. Automatically takes care of block/grid distribution
-            if (self.type=="pbkdf2_sha1" or self.type=="pbkdf2_sha256"):
-                hashlen=0x20
-                self.prg.func_pbkdf2(self.queue, pwdim, None , pass_g, result_g, salt_g, self.n_iter)
-            elif (self.type=="sha1"):
-                hashlen=0x14
-                self.prg.func_sha1(self.queue,pwdim,None,pass_g,result_g)
-                #SHA1 does support longer lengths, but inputbuffer and hash are limited to 64 chars
-            elif (self.type=="sha256"):
-                hashlen=0x20
-                self.prg.func_sha256(self.queue,pwdim,None,pass_g,result_g)
-                #SHA256 does support longer lengths, but inputbuffer and hash are limited to 64 chars
+            inpArray.extend(dk)
+
+        # pyopencl doesn't like empty buffers, so just cheer it up
+        #   (making the buffer larger isn't an issue)
+        if len(inpArray) == 0:
+            inpArray = b"\x00"
+
+        inp_g = cl.Buffer(self.ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=inpArray)
+        
+        return inp_g, numEaten
+
+    def run(self, bufStructs, func, pwdIter, salt=b"", paddedLenFunc=None, rtnPwds = None):
+        # PaddedLenFunc is just for checking: lower bound with original length if not supplied
+        if not paddedLenFunc: paddedLenFunc = lambda x:x
+
+        # Checks on password list : not possible now we have iters!
+        # if type(passwordList)!=list:
+        #     raise TypeError("Parameter passwordList has to be an array")
+        # if type(passwordList[0])!=bytes:
+        #     raise TypeError("Password in passwordList has to be type bytes")
+
+        inBufSize_bytes = bufStructs.inBufferSize * 4
+        outBufSize_bytes = bufStructs.outBufferSize * 4
+        outBufSize_hs = outBufSize_bytes * 2
+
+        # Main loop is taking chunks of at most the workgroup size
+        while True:
+            # Moved to bytearray initially, avoiding copying and above all
+            #   'np.append' which is horrific
+            pwArray = bytearray()
+
+            # For each password in our chunk, process it into pwArray, with length first
+            # Notice that this lines up with the struct declared in the .cl file!
+            chunkSize = self.workgroupsize
+            for i in range(self.workgroupsize):
+                try:
+                    pw = pwdIter.__next__()
+                    # Since we take a iterator, we feed the passwords back if requested
+                    if rtnPwds != None:
+                        rtnPwds.append(pw)
+                except StopIteration:
+                    # Correct the chunk size and break
+                    chunkSize = i
+                    break
+
+                pwLen = len(pw)
+                assert paddedLenFunc(pwLen) <= inBufSize_bytes, \
+                    "password #" + str(i) + ", '" + pw.decode() + "' (length " + str(pwLen) + ") exceeds the input buffer (length " + str(inBufSize_bytes) + ") when padded"
+
+                # Add the length to our pwArray, then pad with 0s to struct size
+                # prev code was np.array([pwLen], dtype=np.uint32), this ultimately is equivalent
+                pwArray.extend((pwLen).to_bytes(4,'little'))
+                pwArray.extend(pw)
+                pwArray.extend([0] * (inBufSize_bytes - pwLen))
+
+            if chunkSize == 0:
+                break
+
+            # Convert the pwArray into a numpy array, just the once.
+            # Declare the numpy array for the digest output
+            pwArray = np.frombuffer(pwArray, dtype=np.uint32) 
+            result = np.zeros(bufStructs.outBufferSize * chunkSize, dtype=np.uint32)
+
+            # Make the salty array, with length at the front
+            saltLen = len(salt)
+            saltArray = bytearray((saltLen).to_bytes(4,'little'))
+            saltArray.extend(salt)
+            ##saltArray.extend(b"\x00" * ((-saltLen) % 4))
+            saltArray.extend(b"\x00" * (bufStructs.saltBufferSize_bytes - saltLen) )
+            saltArray = np.frombuffer(saltArray, dtype=np.uint32)
+            
+            assert saltArray.nbytes - 4 == bufStructs.saltBufferSize_bytes, "Salt doesn't fit in the buffer!"
+
+            # Allocate memory for variables on the device
+            pass_g = cl.Buffer(self.ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=pwArray)
+            salt_g = cl.Buffer(self.ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=saltArray)
+            result_g = cl.Buffer(self.ctx, cl.mem_flags.WRITE_ONLY, result.nbytes)
+            
+            # print("=========== Initial buffers ==============")
+            # print(" pass_g.nbytes = {}".format(pwArray.nbytes))
+            # print(" salt_g.nbytes = {}".format(saltArray.nbytes))
+            # print(" result_g.nbytes = {}".format(result.nbytes))
+            
+            # Call Kernel. Automatically takes care of block/grid distribution
+            pwdim = (chunkSize,)
+
+            # Main function callback : could adapt to pass further data
+            func(self, pwdim, pass_g, salt_g, result_g)
+            ##self.prg.hmac_main(self.queue, pwdim, None, pass_g, salt_g, result_g)
+
+            # Read the results back into our array of int32s, then hexlify
+            # Some inefficiency here, unavoidable using hexlify
             cl.enqueue_copy(self.queue, result, result_g)
-            totalpws-=pwcount
-            pos+=pwcount
-            hexvalue = binascii.hexlify(result)
-            for value in range(0, len(hexvalue), 64*2):
-                val=hexvalue[value:value + 64*2].decode()[0:hashlen*2]
-                results.append(val)
-        return results
+
+            #hexvalue = hexlify(result)
+
+            # Chop up into the individual hash digests, then trim to necessary hash length.
+            results = []
+            #for i in range(0, len(hexvalue), outBufSize_hs):
+            #    hexRes = hexvalue[i:i + outBufSize_hs].decode()
+            #    results.append(hexRes)
+
+            for i in range(0, len(result), outBufSize_bytes//4):
+                v=bytes(result[i:i + outBufSize_bytes//4])
+                results.append(v)
+
+            # Yield this block of results
+            yield results
+
+        # No main return
+        return None
+
+    def determineWorkgroupsize(self, N_value=15):
+        devices = cl.get_platforms()[self.platform_number].get_devices()
+        wgSize = 0
+        for device in devices:
+            ## Actually adjust based on invMemoryDensity!
+            N_blocks_bytes = (1 << N_value) * BLOCK_LEN_BYTES // self.inv_memory_density
+            memoryForOneCore = BLOCK_LEN_BYTES * 2 + N_blocks_bytes  # input, output & V
+
+            ## ! Restrict to half the memory for now
+            coresOnDevice = (int(0.5 * device.global_mem_size) // memoryForOneCore)
+            percentUsage = 100 * memoryForOneCore * coresOnDevice / device.global_mem_size
+            percentUsage = str(percentUsage)[:4]
+            if self.debug == 1:
+                print("Using {} cores on device with global memory {}, = {}%".format(
+                    coresOnDevice, device.global_mem_size, percentUsage
+                ))
+            wgSize += coresOnDevice
+
+        if self.debug == 1:
+            print("Workgroup size determined as {}".format(wgSize))
+
+        return wgSize
+
+    def run_scrypt(self, sprg, kernelCall, dkIter):
+        N_blocks_bytes = (1 << self.N) * BLOCK_LEN_BYTES
+
+        # no. of cores' memory that we can fit into a single buffer
+        #   (seemingly anyway, why isn't it 2^31?)
+        # note: this is NOT the workgroupsize, nor does it bound it
+        maxGangSize = (1 << 29) // N_blocks_bytes
+        assert maxGangSize > 0, "Uh-oh we couldn't fit a single core's V in a buffer."
+
+
+        #   A. Before the loop we produce our huge buffers, once only.
+        #   B. Also make our output buffers & numpys now, just once, to save work
+        #     Note these will be atleast big enough throughout the loop: sometimes they'll have extra room.
+        largeBuffers = []
+        outBuffers = []
+        outNumpys = []
+        outSizes = []
+        for gangSize in takeInChunks(self.sworkgroupsize, maxGangSize):
+            # Produce the large buffer for storing this gang's V arrays
+            # No longer producing a big bytes object in Python
+
+            ## arr = np.frombuffer(bytes(gangSize * N_blocks_bytes), dtype=np.uint32)
+            ## Why is this read only?
+            arr_g = cl.Buffer(self.ctx, cl.mem_flags.READ_ONLY, size = gangSize * N_blocks_bytes)
+            largeBuffers.append(arr_g)
+
+            # Produce the gang's output buffer and (small) numpy array to copy out to
+            nBytes = BLOCK_LEN_BYTES * gangSize
+            result = np.zeros(nBytes // 4, dtype=np.uint32)
+            assert nBytes == result.nbytes
+            result_g = cl.Buffer(self.ctx, cl.mem_flags.WRITE_ONLY, nBytes)
+            outBuffers.append(result_g)
+            outNumpys.append(result)
+
+            # No output from round 0!
+            outSizes.append(0)
+        
+
+
+        # ! For minimal latency, we only block just before our next calls to the kernels:
+        #     there is basically no work between the two.
+
+        # Main loop is taking chunks of workgroup size,
+        #   or less if we exhaust the input derived keys iter
+        iterActive = True
+        while iterActive:
+            #   1. Make New SMALL input buffers (derived key buffer, was password & salt)
+            #       if we exhaust dkIter, continue producing 'empty' input buffers, but mark to leave the main loop
+            newInputs = []
+            inCounts = []
+            for gangSize in takeInChunks(self.sworkgroupsize, maxGangSize):
+                input_g, numEaten = self.makeInputBuffer(dkIter, gangSize)
+                iterActive = (numEaten == gangSize) # note gangSize > 0, so once False this will persist
+                newInputs.append(input_g)
+                inCounts.append(numEaten)
+                
+
+            #   2. (BLOCKING) wait for all our workers to finish (should be at similar times),
+            #       and copy output buffers out to numpy (minimal time loss here, could use 2 sets of output buffers instead)
+            #   Note we may well have copied too much: this is dealt with in 4. below
+            for outSize, outNumpy, outBuf in zip_longest(outSizes, outNumpys, outBuffers):
+                if outSize > 0:
+                    cl.enqueue_copy(self.queue, outNumpy, outBuf)   # is_blocking defaults to true :)
+
+            ##print("Calling kernels..")
+            #   3. (NON-BLOCKING) queue the kernel calls
+            for input_g, arr_g, result_g, inCount in zip_longest(newInputs, largeBuffers, outBuffers, inCounts):
+                if inCount > 0:
+                    dim = (inCount,)
+                    # print("inCount = {}".format(inCount))
+                    # print("All sizes in bytes (hopefully):")
+                    # print("input_g.size = {}".format(input_g.size))
+                    # print("arr_g.size = {}".format(arr_g.size))
+                    # print("result_g.size = {}".format(result_g.size))
+                    # print("\nOpenCL code now:\n")
+                    kernelCall(sprg, (self.queue, dim, None, input_g, arr_g, result_g))
+            ##print("Kernels running..")
+
+            #   4. Process the outputs from the last round, yielding now (while the GPUs are busy)
+            #       Also copy the input counts across to output sizes, for the next loop / final processing below
+            for i, (outNumpy, inCount) in enumerate(zip_longest(outNumpys, inCounts)):
+                outSize = outSizes[i]
+
+                assert outSize % BLOCK_LEN_BYTES == 0
+                outBytes = outNumpy.tobytes()
+                for j in range(0, outSize, BLOCK_LEN_BYTES):
+                    yield outBytes[j:j+BLOCK_LEN_BYTES]
+
+                outSizes[i] = inCount * BLOCK_LEN_BYTES
+
+            # Note that if exiting here then we've updated the outSizes & called the functions
+            # Just remains to capture & process the output..
+
+        ##print("Dropped out of loop")
+        # Do a final loop of processing output (3 & 2)
+        for outBuf, outNumpy, outSize in zip_longest(outBuffers, outNumpys, outSizes):
+            # (BLOCKING) Copy!
+            cl.enqueue_copy(self.queue, outNumpy, outBuf)
+
+            assert outSize % BLOCK_LEN_BYTES == 0
+            outBytes = outNumpy.tobytes()
+            for i in range(0, outSize, BLOCK_LEN_BYTES):
+                yield outBytes[i:i+BLOCK_LEN_BYTES]
+
+
+class opencl_algos:
+    def __init__(self, platform, debug, write_combined_file, inv_memory_density=1):
+        if debug==False:
+            debug=0
+        self.opencl_ctx= opencl_interface(platform, debug, write_combined_file)
+        self.platform_number=platform
+        self.inv_memory_density=inv_memory_density
+
+    def cl_scrypt_init(self, N_value=15):
+        # Initialise the openCL context & compile, with both debugging settings off
+        debug = 0
+        bufStructs = buffer_structs()
+        sprg=self.opencl_ctx.compile(bufStructs, "sCrypt.cl", N=N_value, invMemoryDensity=self.inv_memory_density)
+        return [sprg,bufStructs]
+
+    def cl_scrypt(self, ctx, passwords, N_value=15, r_value=3, p_value=1, desired_key_length=32,
+                    hex_salt=unhexlify("DEADBEEFDEADBEEFDEADBEEFDEADBEEF")):
+
+        def getDkIter(p, salt, pwdIter, rtnPwds=None):
+            # r fixed as 8 in the OpenCL
+            r = 8
+            blockSize = 128 * r
+            for pwd in pwdIter:
+                if rtnPwds is not None:
+                    rtnPwds.append(pwd)
+                # Get derived key, then split into p chunks and yield
+                dk = pbkdf2_hmac("sha256", pwd, salt, 1, dklen=blockSize * p)
+
+                # Yield
+                for i in range(p):
+                    yield dk[i * blockSize: (i + 1) * blockSize]
+
+        sprg=ctx[0]
+
+        # Our callback with the kernel name
+        # Debugging: calls Salsa20
+        def kernelCall(sprg, params):
+            return sprg.ROMix(*params)  # prg.ROMix(*params)
+
+        # Derived key iter: yields p keys for each password
+        passwordList = deque()
+        dkIter = getDkIter(1 << p_value, hex_salt, passwords, passwordList)
+
+        result = []
+        # Main call.
+        group = []
+        for singleOutput in self.opencl_ctx.run_scrypt(sprg, kernelCall, dkIter):
+            group.append(singleOutput)
+            if len(group) == 1 << p_value:
+                expensiveSalt = b"".join(group)
+                commonPwd = passwordList.popleft()
+                sCryptResult = pbkdf2_hmac("sha256", commonPwd, expensiveSalt, 1, desired_key_length)
+
+                # For now print out for debugging
+                # print("Password={}".format(commonPwd))
+                # print("sCrypt={}".format(hexlify(sCryptResult).decode().upper()))
+                #result.append("{}".format(hexlify(sCryptResult).decode().lower()))
+                result.append(sCryptResult)
+                group = []
+        return result
+
+    def concat(self, ll):
+        return [obj for l in ll for obj in l]
+
+    def mdPadLenFunc(self, pwdLen):
+        l = (pwdLen + 1 + 8)
+        l += (64 - (l % 64)) % 64
+        return l
+
+    def cl_sha256_init(self, option="", max_in_bytes=128, max_salt_bytes=32, dklen=0, max_ct_bytes=0):
+        bufStructs = buffer_structs()
+        bufStructs.specifySHA2(256, max_in_bytes, max_salt_bytes, dklen, max_ct_bytes)
+        prg=self.opencl_ctx.compile(bufStructs, 'sha256.cl', option)
+        return [prg, bufStructs]
+
+    def cl_sha256(self, ctx, passwordlist):
+        # self.cl_sha256_init()
+        prg=ctx[0]
+        bufStructs=ctx[1]
+
+        def func(s, pwdim, pass_g, salt_g, result_g):
+            prg.hash_main(s.queue, pwdim, None, pass_g, result_g)
+
+        return self.concat(self.opencl_ctx.run(bufStructs, func, iter(passwordlist), b"", self.mdPadLenFunc))
+
+    def cl_md5_init(self, option=""):
+        bufStructs = buffer_structs()
+        bufStructs.specifyMD5()
+        prg=self.opencl_ctx.compile(bufStructs, 'md5.cl', option)
+        return [prg, bufStructs]
+
+    def cl_md5(self, ctx, passwordlist):
+        # self.cl_md5_init()
+        prg = ctx[0]
+        bufStructs = ctx[1]
+        def func(s, pwdim, pass_g, salt_g, result_g):
+            prg.hash_main(s.queue, pwdim, None, pass_g, result_g)
+
+        return self.concat(self.opencl_ctx.run(bufStructs, func, iter(passwordlist), b"", self.mdPadLenFunc))
+
+    def cl_sha1_init(self, option=""):
+        bufStructs = buffer_structs()
+        bufStructs.specifySHA1()
+        prg=self.opencl_ctx.compile(bufStructs, 'sha1.cl', option)
+        return [prg, bufStructs]
+
+    def cl_sha1(self, ctx, passwordlist):
+        # self.cl_sha1_init()
+        prg = ctx[0]
+        bufStructs = ctx[1]
+        def func(s, pwdim, pass_g, salt_g, result_g):
+            prg.hash_main(s.queue, pwdim, None, pass_g, result_g)
+
+        return self.concat(self.opencl_ctx.run(bufStructs, func, iter(passwordlist), b"", self.mdPadLenFunc))
+
+    # ===========================================================================================
+
+    def cl_hmac(self, ctx, passwordlist, salt):
+        prg = ctx[0]
+        bufStructs = ctx[1]
+        def func(s, pwdim, pass_g, salt_g, result_g):
+            prg.hmac_main(s.queue, pwdim, None, pass_g, salt_g, result_g)
+
+        return self.concat(self.opencl_ctx.run(bufStructs, func, iter(passwordlist), salt))
+
+    def cl_md5_hmac(self, ctx, passwordlist, salt):
+        # self.cl_md5_init("pbkdf2.cl")
+        return self.cl_hmac(ctx, passwordlist, salt)
+
+    def cl_sha1_hmac(self, ctx, passwordlist, salt):
+        # self.cl_sha1_init("pbkdf2.cl")
+        return self.cl_hmac(ctx, passwordlist, salt)
+
+    def cl_sha256_hmac(self, ctx, passwordlist, salt):
+        # self.cl_sha256_init("pbkdf2.cl")
+        return self.cl_hmac(ctx, passwordlist, salt)
+
+    # ===========================================================================================
+
+    def cl_pbkdf2(self, ctx, passwordlist, salt, iters, dklen):
+        prg = ctx[0]
+        bufStructs = ctx[1]
+        def func(s, pwdim, pass_g, salt_g, result_g):
+            prg.pbkdf2(s.queue, pwdim, None, pass_g, salt_g, result_g,
+                       (iters).to_bytes(4, 'little'), (dklen).to_bytes(4, 'little'))
+
+        result = self.concat(self.opencl_ctx.run(bufStructs, func, iter(passwordlist), salt))
+        if dklen != self.max_out_bytes:
+            # We may have made more space for a multiple of the digest size
+            result = [hexRes[:dklen] for hexRes in result]
+        return result
+
+    def cl_pbkdf2_init(self, type, saltlen, dklen):
+        bufStructs = buffer_structs()
+        if type == "md5":
+            self.max_out_bytes = bufStructs.specifyMD5(128, saltlen, dklen)
+            ## hmac is defined in with pbkdf2, as a kernel function
+            prg=self.opencl_ctx.compile(bufStructs, "md5.cl", "pbkdf2.cl")
+        elif type == "sha1":
+            self.max_out_bytes = bufStructs.specifySHA1(128, saltlen, dklen)
+            ## hmac is defined in with pbkdf2, as a kernel function
+            prg=self.opencl_ctx.compile(bufStructs, "sha1.cl", "pbkdf2.cl")
+        elif type == "sha256":
+            self.max_out_bytes = bufStructs.specifySHA2(256, 128, saltlen, dklen)
+            prg=self.opencl_ctx.compile(bufStructs, "sha256.cl", "pbkdf2.cl")
+        else:
+            assert ("Error on hash type, unknown !!!")
+        return [prg, bufStructs]

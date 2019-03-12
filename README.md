@@ -27,7 +27,7 @@ sudo apt install libssl-dev libssl
 sudo ldconfig
 sudo pip3 install scrypt
 sudo apt install opencl-dev && sudo pip3 install pyopencl
-cd Installer/opencl_runtime_16.1.2_x64_rh_6.4.0.37 && ./install_gui.sh
+wget http://registrationcenter-download.intel.com/akdlm/irc_nas/12556/opencl_runtime_16.1.2_x64_rh_6.4.0.37.tgz
 tar xzvf opencl_runtime_16.1.2_x64_rh_6.4.0.37.tgz
 cd opencl_runtime_16.1.2_x64_rh_6.4.0.37
 ./install_gui.sh

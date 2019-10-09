@@ -37,6 +37,12 @@ def sha256_test(opencl_algo, passwordlist):
     clresult=opencl_algo.cl_sha256(ctx,passwordlist)
     test(hashlib.sha256, passwordlist, clresult)
 
+def sha512_test(opencl_algo, passwordlist):
+    print("Testing sha512 ..")
+    ctx=opencl_algo.cl_sha512_init()
+    clresult=opencl_algo.cl_sha512(ctx,passwordlist)
+    test(hashlib.sha512, passwordlist, clresult)
+    
 def md5_test(opencl_algo, passwordlist):
     print("Testing md5 ..")
     ctx=opencl_algo.cl_md5_init()
@@ -76,6 +82,12 @@ def sha256_hmac_test(opencl_algo, passwordlist, salt):
     ctx=opencl_algo.cl_sha256_init("pbkdf2.cl")
     clResult=opencl_algo.cl_sha256_hmac(ctx,passwordlist,salt)
     hmac_test(passwordlist, salt, hashlib.sha256, clResult)
+
+def sha512_hmac_test(opencl_algo, passwordlist, salt):
+    print("Testing hmac using sha512.cl")
+    ctx=opencl_algo.cl_sha512_init("pbkdf2.cl")
+    clResult=opencl_algo.cl_sha512_hmac(ctx,passwordlist,salt)
+    hmac_test(passwordlist, salt, hashlib.sha512, clResult)
 
 def sha1_hmac_test(opencl_algo, passwordlist, salt):
     print("Testing hmac using sha1.cl")
@@ -121,6 +133,12 @@ def pbkdf2_hmac_sha256_test(opencl_algo, passwordlist, salt, iters, dklen):
     clResult = opencl_algo.cl_pbkdf2(ctx,passwordlist, salt, iters, dklen)
     pbkdf2_test(passwordlist, salt, "sha256", iters, dklen, clResult)
 
+def pbkdf2_hmac_sha512_test(opencl_algo, passwordlist, salt, iters, dklen):
+    print("Testing pbkdf2-hmac using sha512.cl")
+    ctx=opencl_algo.cl_pbkdf2_init("sha512", len(salt), dklen)
+    clResult = opencl_algo.cl_pbkdf2(ctx,passwordlist, salt, iters, dklen)
+    pbkdf2_test(passwordlist, salt, "sha512", iters, dklen, clResult)
+
 def scrypt_test(scrypt_opencl_algos, passwords, N_value=15, r_value=3, p_value=1, desired_key_length=32,
                 hex_salt=unhexlify("DEADBEEFDEADBEEFDEADBEEFDEADBEEF")):
     print("Testing scrypt")
@@ -159,27 +177,32 @@ def main(argv):
 
     # Input values to be hashed
     passwordlist = [b'password', b'hmm', b'trolololl', b'madness']
-    salt = b"salty"
-    
+    salts = [b"salty123",b"salty12"]
+
     platform = int(argv[1])
     debug = 0
     write_combined_file = False
     opencl_algos = opencl.opencl_algos(platform, debug, write_combined_file,inv_memory_density=1)
     # Call the tests
 
-    md5_test(opencl_algos,passwordlist)
-    sha256_test(opencl_algos,passwordlist)
-    sha1_test(opencl_algos,passwordlist)
+    for salt in salts:
+        print("Using salt: %s" % salt)
+        md5_test(opencl_algos,passwordlist)
+        sha1_test(opencl_algos,passwordlist)
+        sha256_test(opencl_algos,passwordlist)
+        sha512_test(opencl_algos,passwordlist)
 
-    md5_hmac_test(opencl_algos, passwordlist, salt)
-    sha1_hmac_test(opencl_algos, passwordlist, salt)
-    sha256_hmac_test(opencl_algos, passwordlist, salt)
+        md5_hmac_test(opencl_algos, passwordlist, salt)
+        sha1_hmac_test(opencl_algos, passwordlist, salt)
+        sha256_hmac_test(opencl_algos, passwordlist, salt)
+        sha512_hmac_test(opencl_algos, passwordlist, salt)
+
+        pbkdf2_hmac_md5_test(opencl_algos, passwordlist, salt, 1000, 50)
+        pbkdf2_hmac_sha1_test(opencl_algos, passwordlist, salt, 1000, 50)
+        pbkdf2_hmac_sha256_test(opencl_algos, passwordlist, salt, 1000, 50)
+        pbkdf2_hmac_sha512_test(opencl_algos, passwordlist, salt, 1000, 50)
     
-    pbkdf2_hmac_md5_test(opencl_algos, passwordlist, salt, 1000, 50)
-    pbkdf2_hmac_sha1_test(opencl_algos, passwordlist, salt, 1000, 50)
-    pbkdf2_hmac_sha256_test(opencl_algos, passwordlist, salt, 1000, 50)
-    
-    scrypt_test(opencl_algos,passwordlist,15,3,1,0x20,salt)
+        scrypt_test(opencl_algos,passwordlist,15,3,1,0x20,salt)
 
     print("Tests have finished.")
 

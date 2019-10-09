@@ -3,14 +3,14 @@
 
 Why
 ===
-- Because bruteforcing PBKDF2/HMAC/SCrypt and hashing MD5/SHA1/SHA256 using just CPU sucks.
+- Because bruteforcing PBKDF2/HMAC/SCrypt and hashing MD5/SHA1/SHA256/SHA512 using just CPU sucks.
 - Because Python itself is very slow for bruteforcing
 - Because we'd like to bruteforce using Python and not rely on other
   tools like Hashcat (sorry Atom :D) and do not want to compile c++ first
   
 Installation
 =============
-- Get python 3.7 64-Bit
+- Get python >= 3.7 64-Bit
 
 Windows: 
 - Download pyopencl-2018.2.1+cl12-cp37-cp37m-win_amd64.whl from

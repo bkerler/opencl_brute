@@ -14,20 +14,21 @@ with open(os.path.join(os.path.dirname(__file__), "worker","generic","buffer_str
 
 class buffer_structs:
     def __init__(self):
-        self.code = None
-
+        self.code = ""
+        self.wordSize = 4
+        
     def setMaxBufferSizes(self, max_in_bytes, max_out_bytes, max_salt_bytes=32, max_ct_bytes=0):
         # Ensure each are a multiple of 4
-        max_in_bytes += (-max_in_bytes % 4)
-        max_out_bytes += (-max_out_bytes % 4)
-        max_salt_bytes += (-max_salt_bytes % 4)
+        max_in_bytes += (-max_in_bytes % self.wordSize)
+        max_out_bytes += (-max_out_bytes % self.wordSize)
+        max_salt_bytes += (-max_salt_bytes % self.wordSize)
 
         self.inBufferSize_bytes = max_in_bytes
         self.outBufferSize_bytes = max_out_bytes
         self.saltBufferSize_bytes = max_salt_bytes
-        self.inBufferSize = (max_in_bytes + 3) // 4
-        self.outBufferSize = (max_out_bytes + 3) // 4
-        self.saltBufferSize = (max_salt_bytes + 3) // 4
+        self.inBufferSize = (max_in_bytes + 3) // self.wordSize
+        self.outBufferSize = (max_out_bytes + 3) // self.wordSize
+        self.saltBufferSize = (max_salt_bytes + 3) // self.wordSize
         self.ctBufferSize_bytes = max_ct_bytes
 
     def specifyHashSizes(self, hashBlockSize_bits, hashDigestSize_bits):
@@ -48,7 +49,8 @@ class buffer_structs:
                 "<inBufferSize_bytes>" : str(self.inBufferSize_bytes),
                 "<outBufferSize_bytes>" : str(self.outBufferSize_bytes),
                 "<saltBufferSize_bytes>" : str(self.saltBufferSize_bytes),
-                "<ctBufferSize_bytes>" : str(self.ctBufferSize_bytes)
+                "<ctBufferSize_bytes>" : str(self.ctBufferSize_bytes),
+                "<word_size>" : str(self.wordSize)
         }
 
         rep = dict((re.escape(k), v) for k, v in rep.items())
@@ -58,6 +60,7 @@ class buffer_structs:
     def specifyMD5(self, max_in_bytes=128, max_salt_bytes=32, dklen=0, max_ct_bytes=0):
         self.specifyHashSizes(512, 128)
         maxNumBlocks = 3
+        self.wordSize = 4
         self.setBufferSizesForHashing(maxNumBlocks)
         max_out_bytes = self.hashDigestSize_bits // 8
         if dklen!=0:
@@ -70,6 +73,7 @@ class buffer_structs:
     def specifySHA1(self, max_in_bytes=128, max_salt_bytes=32, dklen=0, max_ct_bytes=0):
         self.specifyHashSizes(512,160)
         maxNumBlocks = 3
+        self.wordSize = 4
         self.setBufferSizesForHashing(maxNumBlocks)
         max_out_bytes = self.hashDigestSize_bits // 8
         if dklen!=0:
@@ -85,7 +89,12 @@ class buffer_structs:
         if hashDigestSize_bits >= 384:
             hashBlockSize_bits = 1024
         self.specifyHashSizes(hashBlockSize_bits, hashDigestSize_bits)
-        maxNumBlocks = 3
+        if hashDigestSize_bits==512:
+            maxNumBlocks = 2
+            self.wordSize = 8
+        else:
+            maxNumBlocks = 3
+            self.wordSize = 4
         self.setBufferSizesForHashing(maxNumBlocks)
         max_out_bytes = self.hashDigestSize_bits // 8
         if dklen!=0:

@@ -13,11 +13,6 @@
 
 #define rotl32(a,n) rotate ((a), (n)) 
 
-unsigned int SWAP (unsigned int val)
-{
-    return (rotate(((val) & 0x00FF00FF), 24U) | rotate(((val) & 0xFF00FF00), 8U));
-}
-
 #define mod(x,y) ((x)-((x)/(y)*(y)))
 
 #define F2(x,y,z)  ((x) ^ (y) ^ (z))

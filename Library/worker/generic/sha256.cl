@@ -17,11 +17,6 @@
 #define shr32(x,n) ((x) >> (n))
 #define rotl32(a,n) rotate ((a), (n))
 
-unsigned int SWAP (unsigned int val)
-{
-    return (rotate(((val) & 0x00FF00FF), 24U) | rotate(((val) & 0xFF00FF00), 8U));
-}
-
 #define S0(x) (rotl32 ((x), 25u) ^ rotl32 ((x), 14u) ^ shr32 ((x),  3u))
 #define S1(x) (rotl32 ((x), 15u) ^ rotl32 ((x), 13u) ^ shr32 ((x), 10u))
 #define S2(x) (rotl32 ((x), 30u) ^ rotl32 ((x), 19u) ^ rotl32 ((x), 10u))

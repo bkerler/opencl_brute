@@ -578,7 +578,7 @@ class opencl_algos:
             self.max_out_bytes = bufStructs.specifySHA2(256, 128, saltlen, dklen)
             prg=self.opencl_ctx.compile(bufStructs, "sha256.cl", "pbkdf2.cl")
         elif type == "sha512":
-            self.max_out_bytes = bufStructs.specifySHA2(512, 128, saltlen, dklen)
+            self.max_out_bytes = bufStructs.specifySHA2(512, 256, saltlen, dklen)
             prg=self.opencl_ctx.compile(bufStructs, "sha512.cl", "pbkdf2.cl")
         else:
             assert ("Error on hash type, unknown !!!")

@@ -583,3 +583,32 @@ class opencl_algos:
         else:
             assert ("Error on hash type, unknown !!!")
         return [prg, bufStructs]
+
+    # ===========================================================================================
+    def cl_hash_iterations(self, ctx, passwordlist, iters, hash_size):
+        prg = ctx[0]
+        bufStructs = ctx[1]
+        def func(s, pwdim, pass_g, salt_g, result_g):
+            prg.hash_iterations(s.queue, pwdim, None, pass_g, result_g, (iters).to_bytes(4, 'little'), (hash_size).to_bytes(4, 'little'))    # ! iters are always ints
+
+        return self.concat(self.opencl_ctx.run(bufStructs, func, iter(passwordlist), b"", self.mdPad_64_func))
+
+    def cl_hash_iterations_init(self, type):
+        bufStructs = buffer_structs()
+        if type == "md5":
+            self.max_out_bytes = bufStructs.specifyMD5()
+            ## hmac is defined in with pbkdf2, as a kernel function
+            prg=self.opencl_ctx.compile(bufStructs, "md5.cl", "hash_iterations.cl")
+        elif type == "sha1":
+            self.max_out_bytes = bufStructs.specifySHA1()
+            ## hmac is defined in with pbkdf2, as a kernel function
+            prg=self.opencl_ctx.compile(bufStructs, "sha1.cl", "hash_iterations.cl")
+        elif type == "sha256":
+            self.max_out_bytes = bufStructs.specifySHA2()
+            prg=self.opencl_ctx.compile(bufStructs, "sha256.cl", "hash_iterations.cl")
+        elif type == "sha512":
+            self.max_out_bytes = bufStructs.specifySHA2(512, 256, 0, 64)
+            prg=self.opencl_ctx.compile(bufStructs, "sha512.cl", "hash_iterations.cl")
+        else:
+            assert ("Error on hash type, unknown !!!")
+        return [prg, bufStructs]

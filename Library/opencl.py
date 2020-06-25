@@ -39,7 +39,7 @@ class opencl_interface:
     inv_memory_density=1
     # Initialiser for the key properties
     #   pbkdf related initialisation removed, will reappear somewhere else
-    def __init__(self, platformNum, debug=0, write_combined_file=False, maxWorkgroupSize=60000, inv_memory_density=1, N_value=15):
+    def __init__(self, platformNum, debug=0, write_combined_file=False, maxWorkgroupSize=60000, inv_memory_density=1, N_value=15, openclDevice = 0):
         printif(debug,"Using Platform %d:" % platformNum)
         devices = cl.get_platforms()[platformNum].get_devices()
         self.platform_number=platformNum
@@ -51,7 +51,7 @@ class opencl_interface:
         self.sworkgroupsize = self.determineWorkgroupsize(N_value)
         self.inv_memory_density=inv_memory_density
         self.ctx = cl.Context(devices)
-        self.queue = cl.CommandQueue(self.ctx)
+        self.queue = cl.CommandQueue(self.ctx, devices[openclDevice])
         self.debug=debug
 
         for device in devices:
@@ -377,10 +377,10 @@ class opencl_interface:
 
 
 class opencl_algos:
-    def __init__(self, platform, debug, write_combined_file, inv_memory_density=1):
+    def __init__(self, platform, debug, write_combined_file, inv_memory_density=1, openclDevice = 0):
         if debug==False:
             debug=0
-        self.opencl_ctx= opencl_interface(platform, debug, write_combined_file)
+        self.opencl_ctx= opencl_interface(platform, debug, write_combined_file, openclDevice = openclDevice)
         self.platform_number=platform
         self.inv_memory_density=inv_memory_density
 

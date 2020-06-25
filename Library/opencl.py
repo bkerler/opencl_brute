@@ -39,7 +39,7 @@ class opencl_interface:
     inv_memory_density=1
     # Initialiser for the key properties
     #   pbkdf related initialisation removed, will reappear somewhere else
-    def __init__(self, platformNum, debug=0, write_combined_file=False, maxWorkgroupSize=60000, inv_memory_density=1, N_value=15):
+    def __init__(self, platformNum, debug=0, write_combined_file=False, maxWorkgroupSize=60000, inv_memory_density=1, N_value=15, openclDevice = 0):
         printif(debug,"Using Platform %d:" % platformNum)
         devices = cl.get_platforms()[platformNum].get_devices()
         self.platform_number=platformNum
@@ -51,7 +51,7 @@ class opencl_interface:
         self.sworkgroupsize = self.determineWorkgroupsize(N_value)
         self.inv_memory_density=inv_memory_density
         self.ctx = cl.Context(devices)
-        self.queue = cl.CommandQueue(self.ctx)
+        self.queue = cl.CommandQueue(self.ctx, devices[openclDevice])
         self.debug=debug
 
         for device in devices:
@@ -377,10 +377,10 @@ class opencl_interface:
 
 
 class opencl_algos:
-    def __init__(self, platform, debug, write_combined_file, inv_memory_density=1):
+    def __init__(self, platform, debug, write_combined_file, inv_memory_density=1, openclDevice = 0):
         if debug==False:
             debug=0
-        self.opencl_ctx= opencl_interface(platform, debug, write_combined_file)
+        self.opencl_ctx= opencl_interface(platform, debug, write_combined_file, openclDevice = openclDevice)
         self.platform_number=platform
         self.inv_memory_density=inv_memory_density
 
@@ -578,8 +578,37 @@ class opencl_algos:
             self.max_out_bytes = bufStructs.specifySHA2(256, 128, saltlen, dklen)
             prg=self.opencl_ctx.compile(bufStructs, "sha256.cl", "pbkdf2.cl")
         elif type == "sha512":
-            self.max_out_bytes = bufStructs.specifySHA2(512, 128, saltlen, dklen)
+            self.max_out_bytes = bufStructs.specifySHA2(512, 256, saltlen, dklen)
             prg=self.opencl_ctx.compile(bufStructs, "sha512.cl", "pbkdf2.cl")
+        else:
+            assert ("Error on hash type, unknown !!!")
+        return [prg, bufStructs]
+
+    # ===========================================================================================
+    def cl_hash_iterations(self, ctx, passwordlist, iters, hash_size):
+        prg = ctx[0]
+        bufStructs = ctx[1]
+        def func(s, pwdim, pass_g, salt_g, result_g):
+            prg.hash_iterations(s.queue, pwdim, None, pass_g, result_g, (iters).to_bytes(4, 'little'), (hash_size).to_bytes(4, 'little'))    # ! iters are always ints
+
+        return self.concat(self.opencl_ctx.run(bufStructs, func, iter(passwordlist), b"", self.mdPad_64_func))
+
+    def cl_hash_iterations_init(self, type):
+        bufStructs = buffer_structs()
+        if type == "md5":
+            self.max_out_bytes = bufStructs.specifyMD5()
+            ## hmac is defined in with pbkdf2, as a kernel function
+            prg=self.opencl_ctx.compile(bufStructs, "md5.cl", "hash_iterations.cl")
+        elif type == "sha1":
+            self.max_out_bytes = bufStructs.specifySHA1()
+            ## hmac is defined in with pbkdf2, as a kernel function
+            prg=self.opencl_ctx.compile(bufStructs, "sha1.cl", "hash_iterations.cl")
+        elif type == "sha256":
+            self.max_out_bytes = bufStructs.specifySHA2()
+            prg=self.opencl_ctx.compile(bufStructs, "sha256.cl", "hash_iterations.cl")
+        elif type == "sha512":
+            self.max_out_bytes = bufStructs.specifySHA2(512, 256, 0, 64)
+            prg=self.opencl_ctx.compile(bufStructs, "sha512.cl", "hash_iterations.cl")
         else:
             assert ("Error on hash type, unknown !!!")
         return [prg, bufStructs]

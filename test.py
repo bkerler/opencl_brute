@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
+# (c) B. Kerler 2018-2021
+# MIT License
 import sys
 import hashlib
 import hmac
@@ -145,6 +147,11 @@ def pbkdf2_hmac_sha256_test(opencl_algo, passwordlist, salt, iters, dklen):
     ctx = opencl_algo.cl_pbkdf2_init("sha256", len(salt), dklen)
     clResult = opencl_algo.cl_pbkdf2(ctx, passwordlist, salt, iters, dklen)
     pbkdf2_test(passwordlist, salt, "sha256", iters, dklen, clResult)
+
+def pbkdf2_hmac_sha256_speedtest(opencl_algo, passwordlist, salt, iters, dklen):
+    print("Testing pbkdf2-hmac using sha256.cl")
+    ctx = opencl_algo.cl_pbkdf2_init("sha256", len(salt), dklen)
+    clResult = opencl_algo.cl_pbkdf2(ctx, passwordlist, salt, iters, dklen)
 
 
 def pbkdf2_hmac_sha512_test(opencl_algo, passwordlist, salt, iters, dklen):
@@ -293,6 +300,15 @@ def main(argv):
         hash_iterations_sha256_test(opencl_algos, passwordlist, 10000)
         hash_iterations_sha512_test(opencl_algos, passwordlist, 10000)
 
+    """
+    from time import perf_counter
+    start=perf_counter()
+    for i in range(200000):
+        passwordlist.append(b"test%04d" % i)
+    pbkdf2_hmac_sha256_speedtest(opencl_algos,passwordlist,salts[0],1000,50)
+    end=perf_counter()
+    print("Time: %f" % (end-start))
+    """
     print("Tests have finished.")
 
 

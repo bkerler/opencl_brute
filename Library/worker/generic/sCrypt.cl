@@ -82,6 +82,7 @@ Generally work with pointers.
     #define N 15        // <= 20?
 #endif
 
+#define mod(x,y) ((x)-((x)/(y)*(y)))
 
 #define r 8         // CAN'T BE CHANGED
 
@@ -413,7 +414,7 @@ __private void Xor_then_Salsa_20_8_InPlace(__private T_Lump64* lump, __private T
 /* Correct regardless of the jumbled-ness of the block! */ \
 /* Requires N <= 32 */ \
 {                                               \
-    j = block->lump[15].buffer[0] % iterations; \
+    j = mod(block->lump[15].buffer[0],iterations); \
 }
 
 
@@ -467,14 +468,14 @@ void recover_and_xor_appropriately(__private T_Block* dest, __global T_Block* V,
         unsigned int j, unsigned int diff){
 
     // Number of computations to make.
-    int nComps = j % invMemoryDensity;
+    int nComps = mod(j,invMemoryDensity);
     int V_index = j / invMemoryDensity;
 
     if (nComps == 0){
         label_nComps_is_zero:
         // Do the xoring directly from the global block V[V_index]
         // Basically the old "xor_appropriately"
-        switch(diff % 4){
+        switch(mod(diff,4)){
             case 0:
                 xorBlock_halfrolled(__private, dest, __global, &V[V_index])
                 break;
@@ -500,7 +501,7 @@ void recover_and_xor_appropriately(__private T_Block* dest, __global T_Block* V,
 
         // We have to decide where to enter the loop, based on how jumbled V[V_index] is
         //   i.e. (V_index * invMemoryDensity) % 4
-        switch((j - nComps) % 4){
+        switch(mod(j - nComps,4)){
             case 0:
                 goto label_j0;
             case 1:
@@ -533,7 +534,7 @@ void recover_and_xor_appropriately(__private T_Block* dest, __global T_Block* V,
 
 
         // With Y = V'[j] recovered, we can finish the job off by xoring appropriately.
-        switch(diff % 4){
+        switch(mod(diff,4)){
             case 0:
                 xorBlock_halfrolled(__private, dest, __private, Y)
                 break;
@@ -597,7 +598,7 @@ __kernel void ROMix( __global T_Block* blocksFlat,
     #define maybeStore(curr_V_blk, X, _j)   \
     /* If due, stores X to curr_V_blk and increments it */  \
     {                                       \
-        if ((_j) % invMemoryDensity == 0){  \
+        if (mod(_j,invMemoryDensity) == 0){  \
             copyBlock_halfrolled(__global, curr_V_blk, __private, X);   \
             curr_V_blk++;                   \
         }                                   \

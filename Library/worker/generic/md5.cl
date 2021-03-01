@@ -196,13 +196,14 @@ __constant uint k_md5[64] = {
 #define updateState(A,B,C,D,i,g,func) (rotate(A + func((B),(C),(D)) + M[g] + K[i], s[i]) + (B))
 
 // Minor macros
+#define mod(x,y) ((x)-((x)/(y)*(y)))
 #define M inpBlock
 #define K k_md5
 #define s s_md5
 #define g_F i                 
-#define g_G ((5*i + 1) % 16)   
-#define g_H ((3*i + 5) % 16)    
-#define g_I ((7*i) % 16)        
+#define g_G mod((5*i + 1),16)
+#define g_H mod((3*i + 5),16)
+#define g_I mod((7*i),16)
 
 #define def_process512Block(funcName, tag) \
 /* Take a 512-bit (64 bytes, 16 ints) block and update the 4 ints of state */           \
@@ -290,8 +291,8 @@ static int funcName(tag unsigned int *msg, const int msgLen_bytes)      \
     /* Don't assume that there are zeros here! */                       \
     msg[padIntIndex] &= maskInt[overhang];                              \
     msg[padIntIndex] |= padInt[overhang];                               \
-    int l = bs_int - 1 - (padIntIndex % bs_int);                        \
-    l = ((l + (bs_int - 2)) % bs_int);                                  \
+    int l = bs_int - 1 - mod(padIntIndex,bs_int);                        \
+    l = mod((l + (bs_int - 2)),bs_int);                                  \
     for (int i = 1; i <= l && i <= 1; i++)                              \
     {                                                                   \
         msg[padIntIndex + i] = 0;                                       \

@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
+# (c) B. Kerler 2018-2021
+# MIT License
 import os
 from hashlib import pbkdf2_hmac
 from binascii import unhexlify
@@ -114,7 +116,10 @@ class opencl_interface:
         }
         self.wordType = npType[self.wordSize]
 
-        src = bufStructs.code
+        if footer_file != None:
+            src = bufStructs.code
+        else:
+            src = ""
         if library_file:
             with open(os.path.join("Library", "worker", "generic", library_file), "r") as rf:
                 src += rf.read()
@@ -606,7 +611,10 @@ class opencl_algos:
                 prg = self.opencl_ctx.compile(bufStructs, "sha1.cl", "pbkdf2.cl")
         elif rtype == "sha256":
             self.max_out_bytes = bufStructs.specifySHA2(256, 128, saltlen, dklen)
-            prg = self.opencl_ctx.compile(bufStructs, "sha256.cl", "pbkdf2.cl")
+            if saltlen <= 32 and dklen <= 64:
+                prg = self.opencl_ctx.compile(bufStructs, "pbkdf2_sha256_32.cl", None)
+            else:
+                prg = self.opencl_ctx.compile(bufStructs, "sha256.cl", "pbkdf2.cl")
         elif rtype == "sha512":
             self.max_out_bytes = bufStructs.specifySHA2(512, 256, saltlen, dklen)
             prg = self.opencl_ctx.compile(bufStructs, "sha512.cl", "pbkdf2.cl")

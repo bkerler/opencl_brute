@@ -268,7 +268,7 @@ def main(argv):
 
     # Input values to be hashed
     passwordlist = [b'password', b'hmm', b'trolololl', b'madness']
-    salts = [b"salty123", b"salty12"]
+    salts = [b"salty123", b"salty12",b"\xd1\x0c\x00\xd2\xfe\x64\x02\x98"]
 
     platform = int(argv[1])
     debug = 0

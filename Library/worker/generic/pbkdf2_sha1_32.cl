@@ -4,8 +4,44 @@
     MIT License
 */
 
-#define rotl32(a,n) rotate ((a), (n)) 
+// All macros left defined for usage in the program
+#define ceilDiv(n,d) (((n) + (d) - 1) / (d))
+// All important now, defining whether we're working with unsigned ints or longs
+#define wordSize 4
 
+// Practical sizes of buffers, in words.
+#define inBufferSize ceilDiv(128, wordSize)
+
+
+// Ultimately hoping to faze out the Size_int32/long64,
+//   in favour of just size (_word implied)
+#define word unsigned int
+
+// ====  Define the structs with the right word size  =====
+//  Helpful & more cohesive to have the lengths of structures as words too,
+//   (rather than unsigned int for both)
+typedef struct {
+    word length; // in bytes
+    word buffer[inBufferSize];
+} inbuf;
+
+typedef struct {
+    word buffer[16];
+} outbuf;
+
+// Salt buffer, used by pbkdf2 & pbe
+typedef struct {
+    word length; // in bytes
+    word buffer[8];
+} saltbuf;
+
+#define rotl32(a,n) rotate ((a), (n))
+#define word unsigned int
+
+unsigned int SWAP (unsigned int val)
+{
+    return (rotate(((val) & 0x00FF00FF), 24U) | rotate(((val) & 0xFF00FF00), 8U));
+}
 #define mod(x,y) x-(x/y*y)
 
 #define F2(x,y,z)  ((x) ^ (y) ^ (z))

@@ -1,21 +1,70 @@
 /*
-    PBKDF2 SHA1 OpenCL Optimized kernel, limited to max. 32 chars for salt and password
-    (c) B. Kerler 2017
+    In- and out- buffer structures (of int32), with variable sizes, for hashing.
+    These allow indexing just using just get_global_id(0)
+    Variables tagged with <..> are replaced, so we can specify just enough room for the data.
+    These are:
+        - hashBlockSize_bits   : The hash's block size in Bits
+        - inMaxNumBlocks      : per hash operation
+        - hashDigestSize_bits   : The hash's digest size in Bits
+
+    Originally adapted from Bjorn Kerler's sha256.cl
     MIT License
 */
+#define DEBUG 1
 
 // All macros left defined for usage in the program
 #define ceilDiv(n,d) (((n) + (d) - 1) / (d))
+
 // All important now, defining whether we're working with unsigned ints or longs
 #define wordSize 4
 
 // Practical sizes of buffers, in words.
 #define inBufferSize ceilDiv(128, wordSize)
+#define outBufferSize ceilDiv(40, wordSize)
+#define saltBufferSize ceilDiv(8, wordSize)
+#define ctBufferSize ceilDiv(0, wordSize)
+
+// 
+#define hashBlockSize_bytes ceilDiv(512, 8) /* Needs to be a multiple of 4, or 8 when we work with unsigned longs */
+#define hashDigestSize_bytes ceilDiv(160, 8)
+
+// just Size always implies _word
+#define hashBlockSize ceilDiv(hashBlockSize_bytes, wordSize)
+#define hashDigestSize ceilDiv(hashDigestSize_bytes, wordSize)
 
 
 // Ultimately hoping to faze out the Size_int32/long64,
 //   in favour of just size (_word implied)
-#define word unsigned int
+#if wordSize == 4
+    #define hashBlockSize_int32 hashBlockSize
+    #define hashDigestSize_int32 hashDigestSize
+    #define word unsigned int
+        
+    unsigned int SWAP (unsigned int val)
+    {
+        return (rotate(((val) & 0x00FF00FF), 24U) | rotate(((val) & 0xFF00FF00), 8U));
+    }
+
+#elif wordSize == 8
+    // Initially for use in SHA-512
+    #define hashBlockSize_long64 hashBlockSize
+    #define hashDigestSize_long64 hashDigestSize
+    #define word unsigned long
+    #define rotl64(a,n) (rotate ((a), (n)))
+    #define rotr64(a,n) (rotate ((a), (64ul-n)))
+    
+    unsigned long SWAP (const unsigned long val)
+    {
+        // ab cd ef gh -> gh ef cd ab using the 32 bit trick
+        unsigned long tmp = (rotr64(val & 0x0000FFFF0000FFFFUL, 16UL) | rotl64(val & 0xFFFF0000FFFF0000UL, 16UL));
+        
+        // Then see this as g- e- c- a- and -h -f -d -b to swap within the pairs,
+        // gh ef cd ab -> hg fe dc ba
+        return (rotr64(tmp & 0xFF00FF00FF00FF00UL, 8UL) | rotl64(tmp & 0x00FF00FF00FF00FFUL, 8UL));
+    }
+#endif
+
+
 
 // ====  Define the structs with the right word size  =====
 //  Helpful & more cohesive to have the lengths of structures as words too,
@@ -26,22 +75,63 @@ typedef struct {
 } inbuf;
 
 typedef struct {
-    word buffer[16];
+    word buffer[outBufferSize];
 } outbuf;
 
 // Salt buffer, used by pbkdf2 & pbe
 typedef struct {
     word length; // in bytes
-    word buffer[8];
+    word buffer[saltBufferSize];
 } saltbuf;
 
-#define rotl32(a,n) rotate ((a), (n))
-#define word unsigned int
+// ciphertext buffer, used in pbe.
+// no code relating to this in the opencl.py core, dealt with in signal_pbe_mac.cl as it's a special case
+typedef struct {
+    word length; // in bytes
+    word buffer[ctBufferSize];
+} ctbuf;
 
-unsigned int SWAP (unsigned int val)
-{
-    return (rotate(((val) & 0x00FF00FF), 24U) | rotate(((val) & 0xFF00FF00), 8U));
-}
+
+
+
+// ========== Debugging function ============
+
+#ifdef DEBUG
+#if DEBUG
+
+    #define def_printFromWord(tag, funcName, end)               \
+    /* For printing the string of bytes stored in an array of words.
+    Option to print hex. */    \
+    static void funcName(tag const word *arr, const unsigned int len_bytes, const bool hex)\
+    {                                           \
+        for (int j = 0; j < len_bytes; j++){    \
+            word v = arr[j / wordSize];                 \
+            word r = mod(j,wordSize) * 8;                \
+            /* Prints little endian, since that's what we use */   \
+            v = (v >> r) & 0xFF;                \
+            if (hex) {                          \
+                printf("%02x", v);              \
+            } else {                            \
+                printf("%c", (char)v);          \
+            }                                   \
+        }                                       \
+        printf(end);                            \
+    }
+
+    def_printFromWord(__private, printFromWord, "")
+    def_printFromWord(__global, printFromWord_glbl, "")
+    def_printFromWord(__private, printFromWord_n, "\n")
+    def_printFromWord(__global, printFromWord_glbl_n, "\n")
+
+#endif
+#endif/*
+    PBKDF2 SHA1 OpenCL Optimized kernel, limited to max. 32 chars for salt and password
+    (c) B. Kerler 2017
+    MIT License
+*/
+
+#define rotl32(a,n) rotate ((a), (n)) 
+
 #define mod(x,y) x-(x/y*y)
 
 #define F2(x,y,z)  ((x) ^ (y) ^ (z))
@@ -307,11 +397,11 @@ static void F(__global const unsigned int *pass, const unsigned int pass_len, un
     unsigned int state[5]={0};
     
     unsigned int tkeylen=hash_len;
-	unsigned int cplen=0;
-	while(tkeylen>0) 
+  unsigned int cplen=0;
+  while(tkeylen>0) 
     {
-		if(tkeylen > 20) cplen = 20;
-		else cplen=tkeylen;
+    if(tkeylen > 20) cplen = 20;
+    else cplen=tkeylen;
         
         //hmac_sha1_init(state,W,ileno,wpos,ipad,opad,pwd);
         //->sha1_init(state,W,ileno,wpos);
@@ -358,9 +448,9 @@ static void F(__global const unsigned int *pass, const unsigned int pass_len, un
         sha1_process2(W,state);
 
         //sha1(opad,0x54,digtmp);
-		//->sha1_init(state,W,ileno,wpos);
-		//->sha1_update(state,W,ileno,wpos,opad,0x54);
-		//->sha1_finish(state,W,ileno,digtmp);
+    //->sha1_init(state,W,ileno,wpos);
+    //->sha1_update(state,W,ileno,wpos,opad,0x54);
+    //->sha1_finish(state,W,ileno,digtmp);
         
         W[0]=state[0];
         W[1]=state[1];

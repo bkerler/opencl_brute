@@ -1,4 +1,10 @@
 /*
+    Qualcomm HMAC OpenCL Optimized kernel
+    (c) B. Kerler 2018-2021
+    MIT License
+*/
+
+/*
     pbkdf2 and HMAC implementation
     requires implementation of PRF (pseudo-random function),
       probably using HMAC and an implementation of hash_main

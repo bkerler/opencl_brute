@@ -24,7 +24,7 @@
 #define saltBufferSize ceilDiv(8, wordSize)
 #define ctBufferSize ceilDiv(0, wordSize)
 
-// 
+//
 #define hashBlockSize_bytes ceilDiv(512, 8) /* Needs to be a multiple of 4, or 8 when we work with unsigned longs */
 #define hashDigestSize_bytes ceilDiv(160, 8)
 
@@ -39,7 +39,7 @@
     #define hashBlockSize_int32 hashBlockSize
     #define hashDigestSize_int32 hashDigestSize
     #define word unsigned int
-        
+
     unsigned int SWAP (unsigned int val)
     {
         return (rotate(((val) & 0x00FF00FF), 24U) | rotate(((val) & 0xFF00FF00), 8U));
@@ -52,12 +52,12 @@
     #define word unsigned long
     #define rotl64(a,n) (rotate ((a), (n)))
     #define rotr64(a,n) (rotate ((a), (64ul-n)))
-    
+
     unsigned long SWAP (const unsigned long val)
     {
         // ab cd ef gh -> gh ef cd ab using the 32 bit trick
         unsigned long tmp = (rotr64(val & 0x0000FFFF0000FFFFUL, 16UL) | rotl64(val & 0xFFFF0000FFFF0000UL, 16UL));
-        
+
         // Then see this as g- e- c- a- and -h -f -d -b to swap within the pairs,
         // gh ef cd ab -> hg fe dc ba
         return (rotr64(tmp & 0xFF00FF00FF00FF00UL, 8UL) | rotl64(tmp & 0x00FF00FF00FF00FFUL, 8UL));
@@ -130,7 +130,7 @@ typedef struct {
     MIT License
 */
 
-#define rotl32(a,n) rotate ((a), (n)) 
+#define rotl32(a,n) rotate ((a), (n))
 
 #define mod(x,y) x-(x/y*y)
 
@@ -284,7 +284,7 @@ static void sha1_process2 (const unsigned int *W, unsigned int *digest)
   digest[2] += C;
   digest[3] += D;
   digest[4] += E;
-} 
+}
 
 static void F(__global const unsigned int *pass, const unsigned int pass_len, unsigned int *salt, const unsigned int salt_len, const unsigned int iter, __global unsigned int* hash, unsigned int hash_len)
 {
@@ -395,14 +395,14 @@ static void F(__global const unsigned int *pass, const unsigned int pass_len, un
 
     unsigned int counter = 1;
     unsigned int state[5]={0};
-    
+
     unsigned int tkeylen=hash_len;
   unsigned int cplen=0;
-  while(tkeylen>0) 
+  while(tkeylen>0)
     {
     if(tkeylen > 20) cplen = 20;
     else cplen=tkeylen;
-        
+
         //hmac_sha1_init(state,W,ileno,wpos,ipad,opad,pwd);
         //->sha1_init(state,W,ileno,wpos);
         //->sha1_update(state,W,ileno,wpos,ipad,0x40);
@@ -451,7 +451,7 @@ static void F(__global const unsigned int *pass, const unsigned int pass_len, un
     //->sha1_init(state,W,ileno,wpos);
     //->sha1_update(state,W,ileno,wpos,opad,0x54);
     //->sha1_finish(state,W,ileno,digtmp);
-        
+
         W[0]=state[0];
         W[1]=state[1];
         W[2]=state[2];
@@ -484,7 +484,7 @@ static void F(__global const unsigned int *pass, const unsigned int pass_len, un
         p[3]=W[3]=state[3];
         p[4]=W[4]=state[4];
 
-        for(int j = 1; j < iter; j++) 
+        for(int j = 1; j < iter; j++)
         {
             //hmac_sha1(pwd,digtmp,32,digtmp);
             //->sha1_init(state,W,ilenor,wposr);
@@ -550,13 +550,13 @@ static void F(__global const unsigned int *pass, const unsigned int pass_len, un
             p[3] ^= state[3];
             p[4] ^= state[4];
         }
-        
+
         p[0]=SWAP(p[0]);
         p[1]=SWAP(p[1]);
         p[2]=SWAP(p[2]);
         p[3]=SWAP(p[3]);
         p[4]=SWAP(p[4]);
-        
+
         tkeylen-= cplen;
         counter++;
         p+= cplen/4;

@@ -268,7 +268,7 @@ def main(argv):
 
     # Input values to be hashed
     passwordlist = [b'password', b'hmm', b'trolololl', b'madness']
-    salts = [b"salty123", b"salty12",b"\xd1\x0c\x00\xd2\xfe\x64\x02\x98"]
+    salts = [b"salty123", b"salty12",b"\xd1\x0c\x00\xd2\xfe\x64\x02\x98",b"\x12\x34\x56\x78"]
 
     platform = int(argv[1])
     debug = 0
@@ -279,26 +279,31 @@ def main(argv):
     for salt in salts:
         print("Using salt: %s" % salt)
         md5_test(opencl_algos, passwordlist)
-        sha1_test(opencl_algos, passwordlist)
-        sha256_test(opencl_algos, passwordlist)
-        sha512_test(opencl_algos, passwordlist)
-
         md5_hmac_test(opencl_algos, passwordlist, salt)
-        sha1_hmac_test(opencl_algos, passwordlist, salt)
-        sha256_hmac_test(opencl_algos, passwordlist, salt)
-        sha512_hmac_test(opencl_algos, passwordlist, salt)
-
+        pbkdf2_hmac_md5_test(opencl_algos, passwordlist, salt, 1000, 32)
         pbkdf2_hmac_md5_test(opencl_algos, passwordlist, salt, 1000, 50)
-        pbkdf2_hmac_sha1_test(opencl_algos, passwordlist, salt, 1000, 50)
-        pbkdf2_hmac_sha256_test(opencl_algos, passwordlist, salt, 1000, 50)
+        hash_iterations_md5_test(opencl_algos, passwordlist, 10000)
+        
+        sha1_test(opencl_algos, passwordlist)
+        sha1_hmac_test(opencl_algos, passwordlist, salt)
+        pbkdf2_hmac_sha1_test(opencl_algos, passwordlist, 16*b"\x00", 1000, 32)
+        pbkdf2_hmac_sha1_test(opencl_algos, passwordlist, salt, 1000, 32)
+        pbkdf2_hmac_sha1_test(opencl_algos, passwordlist, salt, 1000, 64)
+        hash_iterations_sha1_test(opencl_algos, passwordlist, 10000)
+
+        sha256_test(opencl_algos, passwordlist)
+        sha256_hmac_test(opencl_algos, passwordlist, salt)
+        pbkdf2_hmac_sha256_test(opencl_algos, passwordlist, salt, 10000, 32)
+        pbkdf2_hmac_sha256_test(opencl_algos, passwordlist, salt, 10000, 50)
+        hash_iterations_sha256_test(opencl_algos, passwordlist, 10000)
+
+        sha512_test(opencl_algos, passwordlist)
+        sha512_hmac_test(opencl_algos, passwordlist, salt)
+        pbkdf2_hmac_sha512_test(opencl_algos, passwordlist, salt, 1000, 32)
         pbkdf2_hmac_sha512_test(opencl_algos, passwordlist, salt, 1000, 50)
+        hash_iterations_sha512_test(opencl_algos, passwordlist, 10000)
 
         scrypt_test(opencl_algos, passwordlist, 15, 3, 1, 0x20, salt)
-
-        hash_iterations_md5_test(opencl_algos, passwordlist, 10000)
-        hash_iterations_sha1_test(opencl_algos, passwordlist, 10000)
-        hash_iterations_sha256_test(opencl_algos, passwordlist, 10000)
-        hash_iterations_sha512_test(opencl_algos, passwordlist, 10000)
 
     """
     from time import perf_counter

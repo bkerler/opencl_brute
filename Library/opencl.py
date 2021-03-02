@@ -10,6 +10,9 @@ from itertools import chain, repeat, zip_longest
 import numpy as np
 import pyopencl as cl
 from Library.buffer_structs import buffer_structs
+import os, sys, inspect
+current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parent_dir = os.path.dirname(current_dir)
 
 """
     Original copyright:
@@ -121,11 +124,11 @@ class opencl_interface:
         else:
             src = ""
         if library_file:
-            with open(os.path.join("Library", "worker", "generic", library_file), "r") as rf:
+            with open(os.path.join(current_dir, "worker", "generic", library_file), "r") as rf:
                 src += rf.read()
 
         if footer_file:
-            with open(os.path.join("Library", "worker", "generic", footer_file), "r") as rf:
+            with open(os.path.join(current_dir, "worker", "generic", footer_file), "r") as rf:
                 src += rf.read()
 
         # Standardise to using no \r's, move to bytes to stop trickery
@@ -603,15 +606,18 @@ class opencl_algos:
             # hmac is defined in with pbkdf2, as a kernel function
             prg = self.opencl_ctx.compile(bufStructs, "md5.cl", "pbkdf2.cl")
         elif rtype == "sha1":
-            self.max_out_bytes = bufStructs.specifySHA1(128, saltlen, dklen)
-            # hmac is defined in with pbkdf2, as a kernel function
-            if saltlen <= 32 and dklen <= 32:
-                prg = self.opencl_ctx.compile(bufStructs, "pbkdf2_sha1_32.cl", None)
+            if saltlen < 32 and dklen < 32:
+                 dklen=32
+                 self.max_out_bytes = bufStructs.specifySHA1(32, saltlen, dklen)
+                 prg = self.opencl_ctx.compile(bufStructs, "pbkdf2_sha1_32.cl", None)
             else:
+                self.max_out_bytes = bufStructs.specifySHA1(128, saltlen, dklen)
                 prg = self.opencl_ctx.compile(bufStructs, "sha1.cl", "pbkdf2.cl")
         elif rtype == "sha256":
+            if saltlen <= 64 and dklen <= 64:
+                dklen=64
             self.max_out_bytes = bufStructs.specifySHA2(256, 128, saltlen, dklen)
-            if saltlen <= 32 and dklen <= 64:
+            if saltlen <= 64 and dklen <= 64:
                 prg = self.opencl_ctx.compile(bufStructs, "pbkdf2_sha256_32.cl", None)
             else:
                 prg = self.opencl_ctx.compile(bufStructs, "sha256.cl", "pbkdf2.cl")

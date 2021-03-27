@@ -107,7 +107,8 @@ static void F(__global word *pwd, const word pwdLen_bytes,
 
     // Add the integer to the end of the salt
     // NOTE! Always adding callI as just a u32
-    word overhang = saltLen_bytes % wordSize;
+    //word overhang = saltLen_bytes % wordSize;
+    word overhang=((saltLen_bytes)-((saltLen_bytes)/(wordSize)*(wordSize)));
     overhang *= 8; // convert to bits
     word saltLastI = saltLen_bytes / wordSize;
 

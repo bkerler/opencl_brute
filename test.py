@@ -127,6 +127,25 @@ def pbkdf2_test(passwordlist, salt, hashName, iters, dklen, clResult):
                 print(clResult[i])
                 print(correct_res[i])
 
+def pbkdf2_saltlist_test(password, saltlist, hashName, iters, dklen, clResult):
+    correct_res = []
+    for salt in saltlist:
+        correct_res.append(hashlib.pbkdf2_hmac(hashName, password, salt, iters, dklen))
+
+    # Determine success and print
+    correct = [r == c for r, c in zip(clResult, correct_res)]
+    succ = (len(saltlist) == len(clResult)) and functools.reduce(operator.and_, correct, True)
+    if succ:
+        print("Ok m10!")
+    else:
+        print("Failed !")
+        for i in range(len(saltlist)):
+            if clResult[i] == correct_res[i]:
+                print("#{} Succeeded".format(i))
+            else:
+                print("#{} Failed".format(i))
+                print("clResult: ", clResult[i])
+                print("Hashlib: ", correct_res[i])
 
 def pbkdf2_hmac_md5_test(opencl_algo, passwordlist, salt, iters, dklen):
     print("Testing pbkdf2-hmac using md5.cl")
@@ -159,6 +178,30 @@ def pbkdf2_hmac_sha512_test(opencl_algo, passwordlist, salt, iters, dklen):
     ctx = opencl_algo.cl_pbkdf2_init("sha512", len(salt), dklen)
     clResult = opencl_algo.cl_pbkdf2(ctx, passwordlist, salt, iters, dklen)
     pbkdf2_test(passwordlist, salt, "sha512", iters, dklen, clResult)
+
+def pbkdf2_hmac_saltlist_md5_test(opencl_algo, password, saltlist, iters, dklen):
+    print("Testing pbkdf2-hmac using md5.cl")
+    ctx=opencl_algo.cl_pbkdf2_saltlist_init("md5",len(password),dklen)
+    clResult = opencl_algo.cl_pbkdf2_saltlist(ctx,password, saltlist, iters, dklen)
+    pbkdf2_saltlist_test(password, saltlist, "md5", iters, dklen, clResult)
+
+def pbkdf2_hmac_saltlist_sha1_test(opencl_algo, password, saltlist, iters, dklen):
+    print("Testing pbkdf2-hmac using sha1.cl")
+    ctx=opencl_algo.cl_pbkdf2_saltlist_init("sha1", len(password), dklen)
+    clResult = opencl_algo.cl_pbkdf2_saltlist(ctx,password, saltlist, iters, dklen)
+    pbkdf2_saltlist_test(password, saltlist, "sha1", iters, dklen, clResult)
+
+def pbkdf2_hmac_saltlist_sha256_test(opencl_algo, password, saltlist, iters, dklen):
+    print("Testing pbkdf2-hmac using sha256.cl")
+    ctx=opencl_algo.cl_pbkdf2_saltlist_init("sha256", len(password), dklen)
+    clResult = opencl_algo.cl_pbkdf2_saltlist(ctx,password, saltlist, iters, dklen)
+    pbkdf2_saltlist_test(password, saltlist, "sha256", iters, dklen, clResult)
+
+def pbkdf2_hmac_saltlist_sha512_test(opencl_algo, password, saltlist, iters, dklen):
+    print("Testing pbkdf2-hmac using sha512.cl")
+    ctx=opencl_algo.cl_pbkdf2_saltlist_init("sha512", len(password), dklen)
+    clResult = opencl_algo.cl_pbkdf2_saltlist(ctx,password, saltlist, iters, dklen)
+    pbkdf2_saltlist_test(password, saltlist, "sha512", iters, dklen, clResult)
 
 
 def scrypt_test(scrypt_opencl_algos, passwords, N_value=15, r_value=3, p_value=1, desired_key_length=32,
@@ -304,6 +347,12 @@ def main(argv):
         hash_iterations_sha512_test(opencl_algos, passwordlist, 10000)
 
         scrypt_test(opencl_algos, passwordlist, 15, 3, 1, 0x20, salt)
+
+    print("Testing PBKDF2 with SaltList")
+    pbkdf2_hmac_saltlist_md5_test(opencl_algos, passwordlist[0], salts, 1000, 50)
+    pbkdf2_hmac_saltlist_sha1_test(opencl_algos, passwordlist[0], salts, 1000, 50)
+    pbkdf2_hmac_saltlist_sha256_test(opencl_algos, passwordlist[0], salts, 1 << 16, 32)
+    pbkdf2_hmac_saltlist_sha512_test(opencl_algos, passwordlist[0], salts, 1000, 50)
 
     """
     from time import perf_counter

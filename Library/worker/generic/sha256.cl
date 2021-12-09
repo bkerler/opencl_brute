@@ -11,6 +11,10 @@
     func_sha256 renamed to hash_main
 */
 
+/*
+    Modified: hash_main function works for any length inputs.
+*/
+
 #define F1(x,y,z)   (bitselect(z,y,x))
 #define F0(x,y,z)   (bitselect (x, y, ((x) ^ (z))))
 #define mod(x,y) ((x)-((x)/(y)*(y)))
@@ -216,6 +220,9 @@ static void funcName(passTag const unsigned int *pass, int pass_len, hashTag uns
     int plen=pass_len/4;            \
     if (mod(pass_len,4)) plen++;    \
                                     \
+    unsigned int slidePadding=0;    \
+    if (mod(pass_len,64)>=56) slidePadding=1; \
+                                    \
     hashTag unsigned int* p = hash; \
                                     \
     unsigned int W[0x10]={0};   \
@@ -261,7 +268,7 @@ static void funcName(passTag const unsigned int *pass, int pass_len, hashTag uns
             unsigned int padding=0x80<<(((pass_len+4)-((pass_len+4)/4*4))*8);   \
             int v=mod(pass_len,64);         \
             W[v/4]|=SWAP(padding);          \
-            if ((pass_len&0x3B)!=0x3B)      \
+            if (slidePadding==0)            \
             {                               \
                 /* Let's add length */      \
                 W[0x0F]=pass_len*8;         \
@@ -272,34 +279,48 @@ static void funcName(passTag const unsigned int *pass, int pass_len, hashTag uns
         curloop++;                      \
     }                                   \
                             \
-    if (mod(plen,16)==0)    \
-    {               \
-        W[0x0]=0x0; \
-        W[0x1]=0x0; \
-        W[0x2]=0x0; \
-        W[0x3]=0x0; \
-        W[0x4]=0x0; \
-        W[0x5]=0x0; \
-        W[0x6]=0x0; \
-        W[0x7]=0x0; \
-        W[0x8]=0x0; \
-        W[0x9]=0x0; \
-        W[0xA]=0x0; \
-        W[0xB]=0x0; \
-        W[0xC]=0x0; \
-        W[0xD]=0x0; \
-        W[0xE]=0x0; \
-        W[0xF]=0x0; \
-        if ((pass_len&0x3B)!=0x3B)  \
-        {                           \
-            unsigned int padding=0x80<<(((pass_len+4)-((pass_len+4)/4*4))*8);   \
-            W[0]|=SWAP(padding);    \
-        }                           \
-        /* Let's add length */      \
+    if (slidePadding!=0) {  \
+        W[0x0]=0x0;     \
+        W[0x1]=0x0;     \
+        W[0x2]=0x0;     \
+        W[0x3]=0x0;     \
+        W[0x4]=0x0;     \
+        W[0x5]=0x0;     \
+        W[0x6]=0x0;     \
+        W[0x7]=0x0;     \
+        W[0x8]=0x0;     \
+        W[0x9]=0x0;     \
+        W[0xA]=0x0;     \
+        W[0xB]=0x0;     \
+        W[0xC]=0x0;     \
+        W[0xD]=0x0;     \
+        W[0xE]=0x0;     \
         W[0x0F]=pass_len*8;         \
                                     \
         sha256_process2(W,State);   \
-    }   \
+    } else {           \
+        if (mod(plen,16)==0)    \
+        {                       \
+            W[0x0]=0x80000000;  \
+            W[0x1]=0x0; \
+            W[0x2]=0x0; \
+            W[0x3]=0x0; \
+            W[0x4]=0x0; \
+            W[0x5]=0x0; \
+            W[0x6]=0x0; \
+            W[0x7]=0x0; \
+            W[0x8]=0x0; \
+            W[0x9]=0x0; \
+            W[0xA]=0x0; \
+            W[0xB]=0x0; \
+            W[0xC]=0x0; \
+            W[0xD]=0x0; \
+            W[0xE]=0x0; \
+            W[0x0F]=pass_len*8;         \
+                                        \
+            sha256_process2(W,State);   \
+        }   \
+    }       \
                             \
     p[0]=SWAP(State[0]);    \
     p[1]=SWAP(State[1]);    \

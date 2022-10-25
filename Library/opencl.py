@@ -129,7 +129,7 @@ class opencl_interface:
 
         if footer_file:
             with open(os.path.join(current_dir, "worker", "generic", footer_file), "r") as rf:
-                src += rf.read()
+                src += "\n" + rf.read()
 
         # Standardise to using no \r's, move to bytes to stop trickery
         src = src.encode("ascii")

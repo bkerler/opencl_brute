@@ -283,7 +283,7 @@ typedef struct {
 
 // Function not a macro (see 'design choices' at the top)
 // Xors X onto lump then computes lump <- Salsa20/8(lump)
-__private void Xor_then_Salsa_20_8_InPlace(__private T_Lump64* lump, __private T_Lump64* X)
+void Xor_then_Salsa_20_8_InPlace(__private T_Lump64* lump, __private T_Lump64* X)
 {
     // Includes xoring here, to allow for unrolling (at expense of an extra param)
     xorLump64_unrolled(lump, X)

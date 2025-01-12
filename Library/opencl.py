@@ -10,7 +10,7 @@ from itertools import chain, repeat, zip_longest
 import numpy as np
 import pyopencl as cl
 from Library.buffer_structs import buffer_structs
-import os, sys, inspect
+import os, re, sys, inspect
 current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parent_dir = os.path.dirname(current_dir)
 
@@ -95,6 +95,12 @@ class opencl_interface:
 
             # if device.max_work_group_size<self.workgroupsize:
             #    self.workgroupsize=device.max_work_group_size
+
+            # Work around a Nvidia driver bug
+            version = device.version
+            m = re.match(r'OpenCL (\d+\.\d+)', version)
+            if m and float(m.group(1)) >= 2.0:
+                os.environ['PYOPENCL_BUILD_OPTIONS'] = "-cl-std=CL1.2"
 
         printif(debug, "\nUsing work group size of %d\n" % self.workgroupsize)
 

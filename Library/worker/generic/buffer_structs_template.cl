@@ -105,7 +105,7 @@ typedef struct {
 
 #ifdef DEBUG
 #if DEBUG
-
+    #define mod(x,y) ((x)-((x)/(y)*(y)))
     #define def_printFromWord(tag, funcName, end)               \
     /* For printing the string of bytes stored in an array of words.
     Option to print hex. */    \
